@@ -140,12 +140,18 @@ void main() {
     );
 
     await tester.pumpWidget(TerminalApp(live: live, control: control, notifier: notifier));
+    // Karşılama, ilk karede başlayan async zincirle (ayar okuma -> sheet açma)
+    // açılır; sheet'in giriş animasyonu bitene kadar ayrı ayrı kare ilerletilir.
+    // (pumpAndSettle kullanılmaz: sürekli animasyonlar yüzünden zaman aşımına düşebilir.)
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('TerminalF\'e hoş geldiniz'), findsOneWidget);
     await tester.tap(find.text('Bildirimlere İzin Ver ve Başla'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(notifier.permissionRequests, 1);
