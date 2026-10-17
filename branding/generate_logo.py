@@ -1,7 +1,7 @@
 """TerminalF logo: komut istemi (>) + imlec (_).
 
 Tek, kalin, yuvarlak uclu bir cizgi: ">" isareti marka gradyaniyla
-(turkuaz -> mavi), altinda aydinlik bir imlec blogu. Ayni geometri SVG'yi,
+(beyaz -> gumus), altinda aydinlik bir imlec blogu. Ayni geometri SVG'yi,
 Android ikon PNG'lerini, bildirim ikonunu ve README bannerini uretir.
 
 Calistirma: python3 branding/generate_logo.py  (Pillow gerekir)
@@ -12,9 +12,9 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 
 S = 1024
-BG1, BG2 = (10, 14, 20), (21, 30, 44)
-TEAL, BLUE = (45, 226, 192), (77, 139, 255)
-WHITE = (241, 244, 248)
+BG1, BG2 = (0, 0, 0), (27, 27, 27)
+TEAL, BLUE = (255, 255, 255), (189, 189, 189)  # beyaz -> gumus
+WHITE = (245, 245, 245)
 
 # ">" cizgisi (orta cizgi noktalari) ve kalinligi
 CHEV = [(318, 316), (548, 512), (318, 708)]
@@ -81,10 +81,10 @@ def background(shape):
 
 def banner(root, legacy):
     W, H = 1280, 480
-    img = Image.new("RGBA", (W, H), (7, 9, 13, 255))
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 255))
     logo = legacy.resize((260, 260), Image.LANCZOS)
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle([146, 106, 414, 374], radius=68, outline=(35, 42, 54), width=2)
+    d.rounded_rectangle([146, 106, 414, 374], radius=68, outline=(42, 42, 42), width=2)
     img.alpha_composite(logo, (150, 110))
     bold = regular = None
     for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -95,8 +95,8 @@ def banner(root, legacy):
             break
     if bold:
         d.text((450, 130), "TerminalF", font=bold, fill=WHITE)
-        d.text((454, 270), "Telefonunu tek yerden yönet.", font=regular, fill=(138, 148, 166))
-        d.text((454, 322), "Açık kaynak · Reklamsız · Veri göndermez", font=regular, fill=TEAL)
+        d.text((454, 270), "Telefonunu tek yerden yönet.", font=regular, fill=(142, 142, 142))
+        d.text((454, 322), "Açık kaynak · Reklamsız · Veri göndermez", font=regular, fill=(214, 214, 214))
     os.makedirs(os.path.join(root, "docs"), exist_ok=True)
     img.convert("RGB").save(os.path.join(root, "docs", "banner.png"), optimize=True)
     legacy.resize((256, 256), Image.LANCZOS).save(os.path.join(root, "docs", "logo.png"), optimize=True)
@@ -131,7 +131,7 @@ def build(root):
     os.makedirs(vals, exist_ok=True)
     open(os.path.join(vals, "ic_launcher_background.xml"), "w").write(
         '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
-        '    <color name="ic_launcher_background">#0A0E14</color>\n</resources>\n')
+        '    <color name="ic_launcher_background">#000000</color>\n</resources>\n')
     # Bildirim ikonu: durum cubugunda tek renk (beyaz) vektor + R8 koruma
     dr = os.path.join(res, "drawable")
     os.makedirs(dr, exist_ok=True)
@@ -165,12 +165,12 @@ def svg():
     x0, y0, x1, y1 = CURSOR
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A0E14"/><stop offset="1" stop-color="#151E2C"/></linearGradient>
-    <linearGradient id="brand" gradientUnits="userSpaceOnUse" x1="250" y1="250" x2="620" y2="780"><stop offset="0" stop-color="#2DE2C0"/><stop offset="1" stop-color="#4D8BFF"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#1B1B1B"/></linearGradient>
+    <linearGradient id="brand" gradientUnits="userSpaceOnUse" x1="250" y1="250" x2="620" y2="780"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#BDBDBD"/></linearGradient>
   </defs>
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
   <path d="M {ax} {ay} L {bx} {by} L {cx} {cy}" fill="none" stroke="url(#brand)" stroke-width="{CHEV_W}" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="{x0}" y="{y0}" width="{x1-x0}" height="{y1-y0}" rx="{CURSOR_R}" fill="#F1F4F8"/>
+  <rect x="{x0}" y="{y0}" width="{x1-x0}" height="{y1-y0}" rx="{CURSOR_R}" fill="#F5F5F5"/>
 </svg>
 '''
 

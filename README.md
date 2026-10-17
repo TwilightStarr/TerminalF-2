@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="https://github.com/KULLANICI_ADI/TerminalF/actions/workflows/build.yml"><img alt="Build APK" src="https://github.com/KULLANICI_ADI/TerminalF/actions/workflows/build.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="Lisans: MIT" src="https://img.shields.io/badge/lisans-MIT-2de2c0.svg"></a>
-  <img alt="Platform: Android" src="https://img.shields.io/badge/platform-Android%207%2B-4d8bff.svg">
+  <a href="LICENSE"><img alt="Lisans: MIT" src="https://img.shields.io/badge/lisans-MIT-ffffff.svg"></a>
+  <img alt="Platform: Android" src="https://img.shields.io/badge/platform-Android%207%2B-8e8e8e.svg">
   <img alt="Flutter" src="https://img.shields.io/badge/Flutter-stable-02569B.svg?logo=flutter">
 </p>
 
@@ -82,7 +82,7 @@ Yeni bir ayar eklemek için yalnızca `assets/config/tweaks.json`'a bir kayıt e
 
 ## Logo
 
-`assets/icon/icon.svg` ve `branding/android/res/` aynı geometriden üretilir (`python3 branding/generate_logo.py`). `>` komut istemi, alttaki blok terminal imleci. Gradyan marka renkleridir (turkuaz → mavi). Durum çubuğu bildirim ikonu da aynı işaretten türetilmiştir. Üretmek için `pip install pillow` gerekir; `docs/banner.png` depo için sosyal önizleme görselidir (Settings > Social preview). Android 8+ uyarlanabilir ve Android 13+ tek renkli (themed) ikon dahildir.
+`assets/icon/icon.svg` ve `branding/android/res/` aynı geometriden üretilir (`python3 branding/generate_logo.py`). `>` komut istemi, alttaki blok terminal imleci. Gradyan marka renkleridir (beyaz → gümüş). Durum çubuğu bildirim ikonu da aynı işaretten türetilmiştir. Üretmek için `pip install pillow` gerekir; `docs/banner.png` depo için sosyal önizleme görselidir (Settings > Social preview). Android 8+ uyarlanabilir ve Android 13+ tek renkli (themed) ikon dahildir.
 
 ## Kalıcı imza (isteğe bağlı)
 
