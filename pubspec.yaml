@@ -1,0 +1,49 @@
+name: terminal_flutter
+description: "TerminalF - telefonu tek yerden yoneten, kendi kendine yapilandiran cihaz yonetim merkezi."
+publish_to: 'none'
+repository: https://github.com/KULLANICI_ADI/TerminalF
+version: 2.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Olcum ve cihaz bilgisi
+  battery_plus: ^6.2.1
+  thermal: ^1.1.12               # pil sicakligi (yalnizca Android)
+  device_info_plus: ^11.2.0
+  network_info_plus: ^5.0.3
+  path_provider: ^2.1.5
+
+  # Tercihler ve ekran/titresim kontrolu
+  shared_preferences: ^2.3.3
+  wakelock_plus: ^1.2.8
+  vibration: ^3.1.3
+  screen_brightness: ^2.1.7
+  permission_handler: ^11.3.1
+
+  # Bildirimler ve surum bilgisi
+  flutter_local_notifications: ^18.0.1
+  package_info_plus: ^8.1.2
+
+  # Uygulama yonetimi ve sistem kisayollari
+  installed_apps: ^2.0.0
+  app_settings: ^5.1.1
+  url_launcher: ^6.3.1
+
+  # Tam kontrol: root yoksa Shizuku uzerinden sistem komutlari
+  shizuku_api: ^1.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/config/

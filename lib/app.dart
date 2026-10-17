@@ -1,0 +1,189 @@
+import 'package:flutter/material.dart';
+
+import 'core/theme.dart';
+import 'pages/apps_page.dart';
+import 'pages/device_page.dart';
+import 'pages/home_page.dart';
+import 'pages/optimize_page.dart';
+import 'services/notification_service.dart';
+import 'services/startup_service.dart';
+import 'state/alert_monitor.dart';
+import 'state/app_settings.dart';
+import 'state/control_controller.dart';
+import 'state/live_stats.dart';
+import 'utils/haptics.dart';
+import 'widgets/welcome_sheet.dart';
+
+class TerminalApp extends StatefulWidget {
+  const TerminalApp({super.key, this.live, this.control, this.settings, this.notifier});
+
+  /// Testlerde sahte (fake) nesne vermek için; üretimde `null` bırakılır.
+  final LiveStats? live;
+  final ControlController? control;
+  final AppSettings? settings;
+  final Notifier? notifier;
+
+  @override
+  State<TerminalApp> createState() => _TerminalAppState();
+}
+
+class _TerminalAppState extends State<TerminalApp> {
+  late final LiveStats _live = widget.live ?? LiveStats();
+  late final ControlController _control = widget.control ?? ControlController();
+  late final AppSettings _settings = widget.settings ?? AppSettings();
+  late final Notifier _notifier = widget.notifier ?? NotificationService();
+  late final AlertMonitor _monitor =
+      AlertMonitor(live: _live, notifier: _notifier, settings: _settings);
+
+  @override
+  void initState() {
+    super.initState();
+    _control.notifier = _notifier;
+    _control.taskNotificationsEnabled = () => _settings.taskNotifications;
+    _live.start();
+    _control.init();
+    _settings.load();
+    _notifier.init();
+    _monitor.start();
+  }
+
+  @override
+  void dispose() {
+    _monitor.dispose();
+    _live.dispose();
+    _control.dispose();
+    _settings.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'TerminalF',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
+      home: AppShell(
+        live: _live,
+        control: _control,
+        settings: _settings,
+        notifier: _notifier,
+      ),
+    );
+  }
+}
+
+/// Alt gezinme çubuğu + sayfalar. Sayfalar ilk açıldıklarında oluşturulur
+/// (uygulama hızlı açılır) ve sonra bellekte tutulur (sekme değişince
+/// yeniden yüklenmez, uygulama listesi yeniden taranmaz).
+class AppShell extends StatefulWidget {
+  const AppShell({
+    super.key,
+    required this.live,
+    required this.control,
+    required this.settings,
+    required this.notifier,
+  });
+
+  final LiveStats live;
+  final ControlController control;
+  final AppSettings settings;
+  final Notifier notifier;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _index = 0;
+  final Set<int> _visited = {0};
+
+  @override
+  void initState() {
+    super.initState();
+    applySavedPreferences();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeWelcome());
+  }
+
+  /// İlk açılışta bir kez karşılama ve bildirim izni.
+  Future<void> _maybeWelcome() async {
+    await widget.settings.load();
+    if (!mounted || widget.settings.onboarded) return;
+    await widget.settings.markOnboarded();
+    if (!mounted) return;
+    await showWelcomeSheet(context, widget.notifier);
+  }
+
+  Widget _pageAt(int i) {
+    if (!_visited.contains(i)) return const SizedBox.shrink();
+    switch (i) {
+      case 0:
+        return HomePage(live: widget.live, control: widget.control);
+      case 1:
+        return OptimizePage(control: widget.control);
+      case 2:
+        return AppsPage(control: widget.control);
+      default:
+        return DevicePage(
+          live: widget.live,
+          settings: widget.settings,
+          notifier: widget.notifier,
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Geri tuşu: önce Ana Sayfa'ya döner, orada uygulamadan çıkar.
+    return PopScope(
+      canPop: _index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _index = 0);
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: IndexedStack(
+        index: _index,
+        children: [for (var i = 0; i < 4; i++) _pageAt(i)],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) {
+          if (i != _index) Haptics.tap();
+          setState(() {
+            _index = i;
+            _visited.add(i);
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.space_dashboard_outlined),
+            selectedIcon: Icon(Icons.space_dashboard_rounded),
+            label: 'Ana Sayfa',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.tune_outlined),
+            selectedIcon: Icon(Icons.tune_rounded),
+            label: 'Optimize',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.apps_outlined),
+            selectedIcon: Icon(Icons.apps_rounded),
+            label: 'Uygulamalar',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.smartphone_outlined),
+            selectedIcon: Icon(Icons.smartphone_rounded),
+            label: 'Cihaz',
+          ),
+        ],
+      ),
+    );
+  }
+}

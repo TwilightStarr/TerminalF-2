@@ -1,0 +1,50 @@
+[
+  {
+    "id": "app_fdroid",
+    "name": "F-Droid",
+    "description": "Özgür ve açık kaynaklı Android uygulamaları için bağımsız bir mağaza.",
+    "category": "Mağaza",
+    "sourceLabel": "F-Droid",
+    "url": "https://f-droid.org/F-Droid.apk"
+  },
+  {
+    "id": "app_aurora_store",
+    "name": "Aurora Store",
+    "description": "Google hesabı gerektirmeden Play Store uygulamalarına anonim erişim sağlar.",
+    "category": "Mağaza",
+    "sourceLabel": "F-Droid",
+    "url": "https://f-droid.org/packages/com.aurora.store/"
+  },
+  {
+    "id": "app_newpipe",
+    "name": "NewPipe",
+    "description": "Reklamsız, arka planda oynatma destekli açık kaynaklı YouTube istemcisi.",
+    "category": "Medya",
+    "sourceLabel": "GitHub",
+    "url": "https://github.com/TeamNewPipe/NewPipe/releases/latest"
+  },
+  {
+    "id": "app_simple_file_manager",
+    "name": "Simple File Manager",
+    "description": "Reklamsız, izin dostu açık kaynaklı dosya yöneticisi.",
+    "category": "Sistem Araçları",
+    "sourceLabel": "F-Droid",
+    "url": "https://f-droid.org/packages/com.simplemobiletools.filemanager.pro/"
+  },
+  {
+    "id": "app_termux",
+    "name": "Termux",
+    "description": "Android için tam özellikli bir Linux terminal emülatörü ve paket yöneticisi.",
+    "category": "Sistem Araçları",
+    "sourceLabel": "F-Droid",
+    "url": "https://f-droid.org/packages/com.termux/"
+  },
+  {
+    "id": "app_syncthing",
+    "name": "Syncthing",
+    "description": "Sunucusuz, uçtan uca şifrelenmiş dosya senkronizasyonu.",
+    "category": "Sistem Araçları",
+    "sourceLabel": "F-Droid",
+    "url": "https://f-droid.org/packages/com.nutomic.syncthingandroid/"
+  }
+]

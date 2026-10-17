@@ -1,0 +1,300 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+    # Yalnizca dokuman degisince yeni surum cikmasin.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/pull_request_template.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # yalnizca v* etiketinde Release olusturmak icin
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false   # yayin sirasi bozulmasin
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # surum hesabi icin tum etiketler gerekli
+
+      # Surum otomatik hesaplanir (ilk surum 2.0.0):
+      #   commit mesajinda [major] -> X+1.0.0
+      #   commit mesajinda [minor] -> X.Y+1.0
+      #   aksi halde               -> X.Y.Z+1 (yama)
+      # 2.0.0'dan kucuk eski etiketler (v0.x, v1.x) yok sayilir.
+      - name: Surumu hesapla
+        id: ver
+        run: |
+          last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v([2-9]|[1-9][0-9]+)\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [ -z "$last" ]; then
+            next="2.0.0"
+          else
+            IFS=. read -r MA MI PA <<< "${last#v}"
+            msg=$(git log -1 --pretty=%B)
+            if   echo "$msg" | grep -qiF '[major]'; then MA=$((MA+1)); MI=0; PA=0
+            elif echo "$msg" | grep -qiF '[minor]'; then MI=$((MI+1)); PA=0
+            else PA=$((PA+1)); fi
+            next="$MA.$MI.$PA"
+          fi
+          echo "Onceki: ${last:-yok}  ->  Yeni: v$next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Eksik android klasorunu olustur (varsa dokunma)
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create --platforms=android --project-name terminal_flutter --org com.example .
+          fi
+
+      - name: TerminalF logosunu Android ikon kaynaklarina kopyala
+        run: |
+          mkdir -p android/app/src/main/res
+          cp -r branding/android/res/. android/app/src/main/res/
+          # Flutter sablonunun varsayilan (mavi Flutter logolu) ikonlarini
+          # kullanan baska bir tanim kalmadigini dogrula.
+          ls android/app/src/main/res/mipmap-anydpi-v26/
+          grep -q 'ic_launcher' android/app/src/main/AndroidManifest.xml
+
+      - name: Tum alt projelerin (pluginler dahil) compileSdk surumunu zorla yukselt
+        run: |
+          if [ -f "android/build.gradle.kts" ]; then
+            {
+              echo 'subprojects {'
+              echo '    val applyCompileSdkOverride: () -> Unit = {'
+              echo '        if (project.plugins.hasPlugin("com.android.application") || project.plugins.hasPlugin("com.android.library")) {'
+              echo '            project.extensions.findByName("android")?.withGroovyBuilder {'
+              echo '                setProperty("compileSdkVersion", 36)'
+              echo '            }'
+              echo '        }'
+              echo '    }'
+              echo '    if (project.state.executed) {'
+              echo '        applyCompileSdkOverride()'
+              echo '    } else {'
+              echo '        afterEvaluate { applyCompileSdkOverride() }'
+              echo '    }'
+              echo '}'
+            } >> android/build.gradle.kts
+          elif [ -f "android/build.gradle" ]; then
+            {
+              echo 'subprojects {'
+              echo '    def applyCompileSdkOverride = {'
+              echo "        if (project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')) {"
+              echo '            project.android {'
+              echo '                compileSdkVersion 36'
+              echo '            }'
+              echo '        }'
+              echo '    }'
+              echo '    if (project.state.executed) {'
+              echo '        applyCompileSdkOverride()'
+              echo '    } else {'
+              echo '        afterEvaluate { applyCompileSdkOverride() }'
+              echo '    }'
+              echo '}'
+            } >> android/build.gradle
+          fi
+
+          if [ -f "android/app/build.gradle.kts" ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/' android/app/build.gradle.kts
+          elif [ -f "android/app/build.gradle" ]; then
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
+            sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/' android/app/build.gradle
+          fi
+
+      - name: JVM hedef dogrulamasini gevset (pluginlerdeki Java/Kotlin uyusmazligini engelle)
+        run: |
+          if [ -f "android/gradle.properties" ]; then
+            echo "kotlin.jvm.target.validation.mode=warning" >> android/gradle.properties
+          else
+            echo "kotlin.jvm.target.validation.mode=warning" > android/gradle.properties
+          fi
+
+      - name: Uygulama adini TerminalF yap
+        run: |
+          sed -i 's/android:label="[^"]*"/android:label="TerminalF"/' android/app/src/main/AndroidManifest.xml
+
+      - name: AndroidManifest.xml'e izinleri, queries ve Shizuku provider'ini ekle
+        run: |
+          python3 - <<'PY'
+          import re
+
+          path = 'android/app/src/main/AndroidManifest.xml'
+          with open(path, encoding='utf-8') as f:
+              manifest = f.read()
+
+          # QUERY_ALL_PACKAGES icin tools:ignore gerekiyor -> tools ad alani.
+          if 'xmlns:tools=' not in manifest:
+              manifest = manifest.replace(
+                  '<manifest ',
+                  '<manifest xmlns:tools="http://schemas.android.com/tools" ',
+                  1,
+              )
+
+          # (izin adi, tam satir) - zaten varsa tekrar eklenmez (idempotent).
+          permissions = [
+              ('android.permission.VIBRATE',
+               '<uses-permission android:name="android.permission.VIBRATE"/>'),
+              ('android.permission.POST_NOTIFICATIONS',
+               '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>'),
+              ('android.permission.QUERY_ALL_PACKAGES',
+               '<uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission"/>'),
+              ('moe.shizuku.manager.permission.API_V23',
+               '<uses-permission android:name="moe.shizuku.manager.permission.API_V23"/>'),
+          ]
+          missing = [line for name, line in permissions
+                     if 'android:name="%s"' % name not in manifest]
+
+          # <queries>: Flutter sablonu zaten bir <queries> blogu icerebilir;
+          # varsa Shizuku paketini onun icine, yoksa yeni blok olarak ekle.
+          extra = ''
+          if 'moe.shizuku.privileged.api' not in manifest:
+              extra += '<package android:name="moe.shizuku.privileged.api"/>'
+          if 'android:scheme="https"' not in manifest:
+              extra += ('<intent><action android:name="android.intent.action.VIEW"/>'
+                        '<data android:scheme="https"/></intent>')
+          if extra:
+              if '</queries>' in manifest:
+                  manifest = manifest.replace(
+                      '</queries>', '    ' + extra + '\n    </queries>', 1)
+              else:
+                  missing.append('<queries>' + extra + '</queries>')
+
+          if missing:
+              block = ''.join('    ' + line + '\n' for line in missing)
+              manifest = re.sub(r'([ \t]*)<application', lambda m: block + m.group(0),
+                                manifest, count=1)
+
+          provider = ('    <provider android:name="rikka.shizuku.ShizukuProvider" '
+                      'android:authorities="${applicationId}.shizuku" '
+                      'android:multiprocess="false" android:enabled="true" '
+                      'android:exported="true" '
+                      'android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />\n')
+          if 'rikka.shizuku.ShizukuProvider' not in manifest:
+              manifest = manifest.replace('</application>', provider + '    </application>', 1)
+
+          # Gizlilik (yedekleme kapali) ve Android 13+ ongorusel geri hareketi.
+          for attr in ('allowBackup="false"', 'enableOnBackInvokedCallback="true"'):
+              name = attr.split('=')[0]
+              if 'android:' + name not in manifest:
+                  manifest = manifest.replace('<application', '<application android:' + attr, 1)
+
+          with open(path, 'w', encoding='utf-8') as f:
+              f.write(manifest)
+          PY
+
+      - name: Manifest'i dogrula (eksik izin/bilesen varsa derlemeyi durdur)
+        run: |
+          cat android/app/src/main/AndroidManifest.xml
+          for needle in \
+            'android.permission.VIBRATE' \
+            'android.permission.POST_NOTIFICATIONS' \
+            'android.permission.QUERY_ALL_PACKAGES' \
+            'moe.shizuku.manager.permission.API_V23' \
+            'moe.shizuku.privileged.api' \
+            'rikka.shizuku.ShizukuProvider'; do
+            if ! grep -q "$needle" android/app/src/main/AndroidManifest.xml; then
+              echo "Manifest'te eksik: $needle"
+              exit 1
+            fi
+          done
+
+      - name: minSdk'yi Shizuku icin 24'e yukselt
+        run: |
+          if [ -f "android/app/build.gradle.kts" ]; then
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
+          elif [ -f "android/app/build.gradle" ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/' android/app/build.gradle
+          fi
+
+      # flutter_local_notifications (bildirimler) icin gerekli.
+      - name: Core library desugaring etkinlestir
+        run: python3 .github/scripts/patch_gradle.py desugar
+
+      # Opsiyonel: GitHub Secrets tanimliysa surum kalici anahtarla imzalanir
+      # (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
+      # Tanimli degilse debug anahtariyla imzalanir ve derleme yine calisir.
+      - name: Surum imzasini hazirla (secret varsa)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "Imza secret'lari yok: debug anahtariyla imzalanacak."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+          python3 .github/scripts/patch_gradle.py signing
+
+      - name: Gradle yamalarini dogrula
+        run: |
+          f=$(ls android/app/build.gradle.kts android/app/build.gradle 2>/dev/null | head -1)
+          grep -q 'coreLibraryDesugaring' "$f" || { echo "Desugaring eksik"; exit 1; }
+          test -f android/app/src/main/res/drawable/ic_stat_notify.xml || { echo "Bildirim ikonu eksik"; exit 1; }
+
+      - run: flutter pub get
+
+      # Analiz hatalari (error) derlemeyi durdurur; info/warning durdurmaz.
+      - name: Statik analiz
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Testler
+        run: flutter test
+
+      - name: APK derle (surum ${{ steps.ver.outputs.version }})
+        run: |
+          flutter build apk --release \
+            --build-name=${{ steps.ver.outputs.version }} \
+            --build-number=${{ github.run_number }}
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/TerminalF-v${{ steps.ver.outputs.version }}.apk
+
+      - name: Derlenen APK dosyasini kontrol et
+        run: |
+          if [ ! -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "APK bulunamadi!"
+            exit 1
+          fi
+          ls -la build/app/outputs/flutter-apk/app-release.apk
+
+      - name: APK'yi yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/TerminalF-v${{ steps.ver.outputs.version }}.apk
+
+      - name: GitHub Release olustur (main'e her push)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: TerminalF v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: build/app/outputs/flutter-apk/TerminalF-v${{ steps.ver.outputs.version }}.apk
+          generate_release_notes: true

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "feat_developer",
+    "title": "Geliştirici Seçenekleri",
+    "description": "USB hata ayıklama, GPU render önizleme vb. gelişmiş ayarlar.",
+    "settingsType": "developer"
+  },
+  {
+    "id": "feat_battery_optimization",
+    "title": "Pil Optimizasyonu",
+    "description": "Uygulama bazlı pil optimizasyonu istisnalarını yönetir.",
+    "settingsType": "batteryOptimization"
+  },
+  {
+    "id": "feat_location",
+    "title": "Konum Ayarları",
+    "description": "Konum servislerini ve hassasiyet modunu yönetir.",
+    "settingsType": "location"
+  },
+  {
+    "id": "feat_internal_storage",
+    "title": "Depolama Ayarları",
+    "description": "Cihaz depolama alanı kullanımını gösterir.",
+    "settingsType": "internalStorage"
+  },
+  {
+    "id": "feat_accessibility",
+    "title": "Erişilebilirlik",
+    "description": "Erişilebilirlik servislerini yönetir.",
+    "settingsType": "accessibility"
+  }
+]
