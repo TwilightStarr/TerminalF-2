@@ -137,13 +137,17 @@ class _HomePageState extends State<HomePage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
               children: [
-                _Header(control: widget.control),
+                FadeSlideIn(key: const ValueKey('h'), index: 0, child: _Header(control: widget.control)),
                 const SizedBox(height: 18),
-                _HealthCard(
+                FadeSlideIn(
+                  key: const ValueKey('health'),
+                  index: 1,
+                  child: _HealthCard(
                   score: score,
                   hasData: ram != null || disk != null || battery.percent != null,
                   busy: _running == 'Akıllı optimizasyon',
                   onOptimize: _smartOptimize,
+                ),
                 ),
                 const SizedBox(height: 14),
                 for (final item in advice) ...[
@@ -151,6 +155,12 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 10),
                 ],
                 if (advice.isEmpty) const _AllGoodCard(),
+                FadeSlideIn(
+                  key: const ValueKey('stats'),
+                  index: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 const SectionHeader('Anlık Durum'),
                 _StatGrid(
                   children: [
@@ -202,6 +212,15 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
+                    ],
+                  ),
+                ),
+                FadeSlideIn(
+                  key: const ValueKey('quick'),
+                  index: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 const SectionHeader('Hızlı İşlemler'),
                 _StatGrid(
                   aspect: 1.9,
@@ -229,6 +248,9 @@ class _HomePageState extends State<HomePage> {
                       onTap: () => showControlSetup(context, widget.control),
                     ),
                   ],
+                ),
+                    ],
+                  ),
                 ),
               ],
             ),

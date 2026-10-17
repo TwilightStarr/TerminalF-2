@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../state/app_settings.dart';
 import '../utils/haptics.dart';
+import '../utils/motion.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/ui.dart';
 
@@ -39,6 +40,34 @@ class _AppearancePageState extends State<AppearancePage> {
     s.setLogoCustom(_customColor);
   }
 
+  Widget _themeGrid({required bool dark}) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        const gap = 12.0;
+        final w = (c.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final p in AppPalettes.all)
+              if (p.isDark == dark)
+                SizedBox(
+                  width: w,
+                  child: _ThemeTile(
+                    palette: p,
+                    selected: s.themeId == p.id,
+                    onTap: () {
+                      Haptics.tap();
+                      s.setTheme(p.id);
+                    },
+                  ),
+                ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,31 +84,37 @@ class _AppearancePageState extends State<AppearancePage> {
           builder: (context, _) => ListView(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
             children: [
-              const SectionHeader('Tema'),
-              LayoutBuilder(
-                builder: (context, c) {
-                  const gap = 12.0;
-                  final w = (c.maxWidth - gap) / 2;
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: [
-                      for (final p in AppPalettes.all)
-                        SizedBox(
-                          width: w,
-                          child: _ThemeTile(
-                            palette: p,
-                            selected: s.themeId == p.id,
-                            onTap: () {
-                              Haptics.tap();
-                              s.setTheme(p.id);
-                            },
-                          ),
-                        ),
-                    ],
-                  );
-                },
+              const SectionHeader('Animasyonlar'),
+              AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.animation_rounded, color: AppColors.muted),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Animasyonlar', style: TextStyle(fontWeight: FontWeight.w700)),
+                          SizedBox(height: 2),
+                          _Caption('Sekme geçişi, belirme ve tema geçiş efektleri'),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: s.animations,
+                      onChanged: (v) {
+                        Haptics.tap();
+                        s.setAnimations(v);
+                      },
+                    ),
+                  ],
+                ),
               ),
+              const SectionHeader('Koyu Temalar'),
+              _themeGrid(dark: true),
+              const SectionHeader('Açık Temalar'),
+              _themeGrid(dark: false),
               const SectionHeader('Logo Rengi'),
               AppCard(
                 child: Column(
@@ -198,7 +233,9 @@ class _ThemeTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: radius,
-        child: Container(
+        child: AnimatedContainer(
+          duration: Motion.d(const Duration(milliseconds: 220)),
+          curve: Curves.easeOutCubic,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: radius,
@@ -321,7 +358,8 @@ class _LogoSwatch extends StatelessWidget {
           width: 56,
           child: Column(
             children: [
-              Container(
+              AnimatedContainer(
+                duration: Motion.d(const Duration(milliseconds: 180)),
                 width: 46,
                 height: 46,
                 padding: const EdgeInsets.all(3),
@@ -413,4 +451,14 @@ class _HueSlider extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Caption extends StatelessWidget {
+  const _Caption(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(text, style: TextStyle(color: AppColors.muted, fontSize: 12.5));
 }

@@ -12,6 +12,7 @@ import 'state/app_settings.dart';
 import 'state/control_controller.dart';
 import 'state/live_stats.dart';
 import 'utils/haptics.dart';
+import 'utils/motion.dart';
 import 'widgets/welcome_sheet.dart';
 
 class TerminalApp extends StatefulWidget {
@@ -27,7 +28,11 @@ class TerminalApp extends StatefulWidget {
   State<TerminalApp> createState() => _TerminalAppState();
 }
 
-class _TerminalAppState extends State<TerminalApp> {
+class _TerminalAppState extends State<TerminalApp> with SingleTickerProviderStateMixin {
+  /// Tema/logo değişince arayüz yumuşakça belirir.
+  late final AnimationController _themeFade =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 320), value: 1);
+
   late final LiveStats _live = widget.live ?? LiveStats();
   late final ControlController _control = widget.control ?? ControlController();
   late final AppSettings _settings = widget.settings ?? AppSettings();
@@ -60,6 +65,7 @@ class _TerminalAppState extends State<TerminalApp> {
     _appearanceKey = key;
     AppTheme.applySystemChrome();
     setState(() {});
+    if (Motion.enabled) _themeFade.forward(from: 0.25);
     void visit(Element e) {
       e.markNeedsBuild();
       e.visitChildren(visit);
@@ -71,6 +77,7 @@ class _TerminalAppState extends State<TerminalApp> {
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
+    _themeFade.dispose();
     _monitor.dispose();
     _live.dispose();
     _control.dispose();
@@ -84,6 +91,10 @@ class _TerminalAppState extends State<TerminalApp> {
       title: 'TerminalF',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.current,
+      builder: (context, child) => FadeTransition(
+        opacity: _themeFade,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: AppShell(
         live: _live,
         control: _control,
@@ -115,8 +126,17 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin {
   int _index = 0;
+  late final AnimationController _tabFade =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 240), value: 1);
+
+  @override
+  void dispose() {
+    _tabFade.dispose();
+    super.dispose();
+  }
+
   final Set<int> _visited = {0};
 
   @override
@@ -159,7 +179,10 @@ class _AppShellState extends State<AppShell> {
     return PopScope(
       canPop: _index == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _index = 0);
+        if (!didPop) {
+          if (Motion.enabled) _tabFade.forward(from: 0.0);
+          setState(() => _index = 0);
+        }
       },
       child: _buildScaffold(),
     );
@@ -168,14 +191,27 @@ class _AppShellState extends State<AppShell> {
   Widget _buildScaffold() {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(
-        index: _index,
-        children: [for (var i = 0; i < 4; i++) _pageAt(i)],
+      body: AnimatedBuilder(
+        animation: _tabFade,
+        builder: (context, child) {
+          final t = Curves.easeOutCubic.transform(_tabFade.value);
+          return Opacity(
+            opacity: t,
+            child: Transform.translate(offset: Offset(0, (1 - t) * 10), child: child),
+          );
+        },
+        child: IndexedStack(
+          index: _index,
+          children: [for (var i = 0; i < 4; i++) _pageAt(i)],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
-          if (i != _index) Haptics.tap();
+          if (i != _index) {
+            Haptics.tap();
+            if (Motion.enabled) _tabFade.forward(from: 0.0);
+          }
           setState(() {
             _index = i;
             _visited.add(i);

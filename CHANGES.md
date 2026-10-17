@@ -1,6 +1,7 @@
 # Görünüm güncellemesi
 
-- Yeni **Görünüm** sayfası (Cihaz > Ayarlar > Görünüm): 7 hazır tema (Siyah & Beyaz, Beyaz & Siyah, Neon Turkuaz, Okyanus, Gün Batımı, Orman, Mor).
+- Yeni **Görünüm** sayfası (Cihaz > Ayarlar > Görünüm): 18 hazır tema. Koyu: Siyah & Beyaz, Neon Turkuaz, Okyanus, Gün Batımı, Orman, Mor, Kızıl, Altın, Buz, Gül, Nord, Drakula, Matrix. Açık: Beyaz & Siyah, Gökyüzü, Nane, Krem, Lavanta.
+- **Animasyonlar:** sekme geçişi, ana sayfa kartlarının kademeli belirmesi, tema değişiminde yumuşak geçiş, seçim efektleri. Görünüm sayfasındaki anahtarla kapatılır; sistemin "animasyonları kaldır" ayarına da uyar.
 - **Varsayılan tema artık siyah-beyaz**; karşılama ekranı ve logo da buna uyar. Eski turkuaz görünüm "Neon Turkuaz" olarak duruyor.
 - **Logo rengi** değiştirilebilir: tema rengi, 11 düz/gradyan hazır renk veya ton + açıklık çubuklarıyla özel renk. Ana ekran, Cihaz sayfası ve karşılamadaki logo birlikte değişir.
 - Seçimler kaydedilir ve uygulama açılırken ilk kareden itibaren uygulanır.

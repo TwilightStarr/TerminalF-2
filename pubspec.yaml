@@ -1,7 +1,6 @@
 name: terminal_flutter
 description: "TerminalF - telefonu tek yerden yoneten, kendi kendine yapilandiran cihaz yonetim merkezi."
 publish_to: 'none'
-repository: https://github.com/KULLANICI_ADI/TerminalF
 version: 2.0.0+1
 
 environment:

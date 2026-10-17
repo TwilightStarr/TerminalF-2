@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:terminal_flutter/core/theme.dart';
 import 'package:terminal_flutter/state/app_settings.dart';
+import 'package:terminal_flutter/utils/motion.dart';
 
 void main() {
   setUp(() {
@@ -45,5 +46,24 @@ void main() {
 
     await s.setTheme('yok_boyle_bir_tema');
     expect(s.themeId, AppPalettes.defaultId);
+  });
+
+  test('Animasyonlar varsayılan açık, kapatma kaydedilir', () async {
+    final s = AppSettings();
+    await s.load();
+    expect(s.animations, isTrue);
+    await s.setAnimations(false);
+    expect(Motion.enabled, isFalse);
+
+    final again = AppSettings();
+    await again.load();
+    expect(again.animations, isFalse);
+    await again.setAnimations(true);
+  });
+
+  test('Tüm temaların kimliği benzersiz, en az 15 tema var', () {
+    final ids = AppPalettes.all.map((p) => p.id).toSet();
+    expect(ids.length, AppPalettes.all.length);
+    expect(AppPalettes.all.length, greaterThanOrEqualTo(15));
   });
 }

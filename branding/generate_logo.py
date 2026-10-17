@@ -98,8 +98,8 @@ def banner(root, legacy):
         d.text((454, 270), "Telefonunu tek yerden yönet.", font=regular, fill=(142, 142, 142))
         d.text((454, 322), "Açık kaynak · Reklamsız · Veri göndermez", font=regular, fill=(214, 214, 214))
     os.makedirs(os.path.join(root, "docs"), exist_ok=True)
-    img.convert("RGB").save(os.path.join(root, "docs", "banner.png"), optimize=True)
-    legacy.resize((256, 256), Image.LANCZOS).save(os.path.join(root, "docs", "logo.png"), optimize=True)
+    img.convert("RGB").save(os.path.join(root, "docs", "banner-bw.png"), optimize=True)
+    legacy.resize((256, 256), Image.LANCZOS).save(os.path.join(root, "docs", "logo-bw.png"), optimize=True)
 
 
 def build(root):

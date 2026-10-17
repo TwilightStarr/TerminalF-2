@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme.dart';
+import '../utils/motion.dart';
 
 /// Tüm sayfalarda ortak, sade kart.
 class AppCard extends StatelessWidget {
@@ -411,7 +412,7 @@ class HealthRing extends StatelessWidget {
         children: [
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 0, end: score / 100.0),
-            duration: const Duration(milliseconds: 700),
+            duration: Motion.d(const Duration(milliseconds: 700)),
             curve: Curves.easeOutCubic,
             builder: (context, value, _) => CustomPaint(
               size: Size(size, size),
@@ -509,4 +510,61 @@ Future<bool> confirmDialog(
     ),
   );
   return result ?? false;
+}
+
+/// İçeriği hafifçe yukarı kayarak ve belirerek gösterir. `index` arttıkça
+/// gecikir (kademeli giriş). Animasyonlar kapalıysa doğrudan gösterir.
+class FadeSlideIn extends StatefulWidget {
+  const FadeSlideIn({super.key, required this.child, this.index = 0, this.offset = 16});
+
+  final Widget child;
+  final int index;
+  final double offset;
+
+  @override
+  State<FadeSlideIn> createState() => _FadeSlideInState();
+}
+
+class _FadeSlideInState extends State<FadeSlideIn> with SingleTickerProviderStateMixin {
+  late final int _delayMs = math.min(widget.index, 8) * 55;
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: Duration(milliseconds: _delayMs + 420));
+  late final Animation<double> _a = CurvedAnimation(
+    parent: _c,
+    curve: Interval(_delayMs / (_delayMs + 420), 1, curve: Curves.easeOutCubic),
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (Motion.on(context)) {
+      _c.forward();
+    } else {
+      _c.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _a,
+      child: widget.child,
+      builder: (context, child) => Opacity(
+        opacity: _a.value.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - _a.value) * widget.offset),
+          child: child,
+        ),
+      ),
+    );
+  }
 }

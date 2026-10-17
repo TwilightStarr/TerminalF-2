@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import '../services/settings_service.dart';
 import '../utils/alert_rules.dart';
 import '../utils/haptics.dart';
+import '../utils/motion.dart';
 
 /// Kullanıcı tercihlerinin bellekteki (dinlenebilir) hâli. Bir kez diskten
 /// okunur; değişiklikler hem arayüze hem diske yansır.
@@ -21,6 +22,7 @@ class AppSettings extends ChangeNotifier {
   static const String _storageKey = 'alert_storage';
   static const String _batteryKey = 'alert_battery';
   static const String _memoryKey = 'alert_memory';
+  static const String _animKey = 'animations';
   static const String _themeKey = 'theme_id';
   static const String _logoKey = 'logo_id';
   static const String _logoCustomKey = 'logo_custom';
@@ -36,6 +38,9 @@ class AppSettings extends ChangeNotifier {
   bool healthAlerts = true;
 
   bool haptics = true;
+
+  /// Arayüz animasyonları (geçişler, belirme efektleri).
+  bool animations = true;
 
   /// Seçili tema (varsayılan: siyah-beyaz) ve logo rengi.
   String themeId = AppPalettes.defaultId;
@@ -77,6 +82,7 @@ class AppSettings extends ChangeNotifier {
       taskNotifications = await _store.readBool(_taskNotifKey, fallback: true);
       healthAlerts = await _store.readBool(_alertsKey, fallback: true);
       haptics = await _store.readBool(_hapticsKey, fallback: true);
+      animations = await _store.readBool(_animKey, fallback: true);
       temperatureC = (await _store.readDouble(_tempKey, fallback: 42)).clamp(35.0, 50.0);
       storagePercent = (await _store.readDouble(_storageKey, fallback: 90)).round().clamp(70, 98);
       batteryPercent = (await _store.readDouble(_batteryKey, fallback: 15)).round().clamp(5, 30);
@@ -89,6 +95,7 @@ class AppSettings extends ChangeNotifier {
       // Tercihler okunamazsa varsayılanlarla devam et.
     }
     Haptics.enabled = haptics;
+    Motion.enabled = animations;
     _applyAppearance();
     notifyListeners();
   }
@@ -140,6 +147,13 @@ class AppSettings extends ChangeNotifier {
     memoryPercent = v.clamp(80, 98);
     notifyListeners();
     await _safe(() => _store.writeDouble(_memoryKey, memoryPercent.toDouble()));
+  }
+
+  Future<void> setAnimations(bool v) async {
+    animations = v;
+    Motion.enabled = v;
+    notifyListeners();
+    await _safe(() => _store.writeBool(_animKey, v));
   }
 
   Future<void> setTheme(String id) async {
