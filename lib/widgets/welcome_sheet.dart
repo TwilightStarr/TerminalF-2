@@ -13,7 +13,6 @@ Future<void> showWelcomeSheet(BuildContext context, Notifier notifier) {
     isScrollControlled: true,
     isDismissible: true,
     backgroundColor: AppColors.surface,
-    surfaceTintColor: Colors.transparent,
     showDragHandle: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),

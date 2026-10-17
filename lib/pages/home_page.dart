@@ -304,7 +304,7 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'TerminalF',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.3),
               ),
@@ -428,8 +428,8 @@ class _AllGoodCard extends StatelessWidget {
       child: Row(
         children: [
           Icon(Icons.check_circle_rounded, color: AppColors.good),
-          SizedBox(width: 12),
-          Expanded(
+          const SizedBox(width: 12),
+          const Expanded(
             child: Text(
               'Her şey yolunda. Yapmanız gereken bir şey yok.',
               style: TextStyle(fontWeight: FontWeight.w600),

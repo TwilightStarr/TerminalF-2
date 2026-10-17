@@ -120,9 +120,9 @@ class _AppearancePageState extends State<AppearancePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
+                    const Center(
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 16),
+                        padding: EdgeInsets.only(top: 4, bottom: 16),
                         child: AppLogo(size: 84),
                       ),
                     ),

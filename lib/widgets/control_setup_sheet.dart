@@ -89,7 +89,7 @@ class _SetupBody extends StatelessWidget {
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Telefonu gerçekten yönetebilmek (uygulamaları durdurmak, '
                     'önbellek temizlemek, sistem ayarlarını optimize etmek) için '
                     'sistem yetkisi gerekir. Root varsa otomatik kullanılır; yoksa '
