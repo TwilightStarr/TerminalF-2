@@ -278,7 +278,7 @@ class _Header extends StatelessWidget {
       children: [
         const AppLogo(size: 46),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -328,7 +328,7 @@ class _HealthCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Cihaz Sağlığı', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+                Text('Cihaz Sağlığı', style: TextStyle(color: AppColors.muted, fontSize: 13)),
                 const SizedBox(height: 2),
                 Text(
                   hasData ? healthLabel(score) : 'Ölçülüyor…',
@@ -384,7 +384,7 @@ class _AdviceCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   advice.detail,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35),
                 ),
               ],
             ),
@@ -402,7 +402,7 @@ class _AllGoodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AppCard(
+    return AppCard(
       child: Row(
         children: [
           Icon(Icons.check_circle_rounded, color: AppColors.good),

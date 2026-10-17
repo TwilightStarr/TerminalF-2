@@ -13,6 +13,8 @@ Future<void> showWelcomeSheet(BuildContext context, Notifier notifier) {
     isScrollControlled: true,
     isDismissible: true,
     backgroundColor: AppColors.surface,
+    surfaceTintColor: Colors.transparent,
+    showDragHandle: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
@@ -49,7 +51,7 @@ class _WelcomeBodyState extends State<_WelcomeBody> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Center(child: AppLogo(size: 72)),
+            const Center(child: AppLogo(size: 84)),
             const SizedBox(height: 16),
             const Center(
               child: Text(
@@ -89,7 +91,7 @@ class _WelcomeBodyState extends State<_WelcomeBody> {
             Center(
               child: TextButton(
                 onPressed: _busy ? null : () => _start(askPermission: false),
-                child: const Text('Şimdilik geç', style: TextStyle(color: AppColors.muted)),
+                child: Text('Şimdilik geç', style: TextStyle(color: AppColors.muted)),
               ),
             ),
           ],
@@ -117,8 +119,9 @@ class _Point extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: AppColors.primary.faded(0.14),
+              color: AppColors.primary.faded(0.10),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.outline),
             ),
             child: Icon(icon, color: AppColors.primary, size: 20),
           ),
@@ -131,7 +134,7 @@ class _Point extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   text,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35),
                 ),
               ],
             ),

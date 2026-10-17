@@ -18,6 +18,7 @@ import '../utils/app_info.dart';
 import '../utils/format_utils.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/ui.dart';
+import 'appearance_page.dart';
 import 'settings_page.dart';
 
 /// Cihaz: bilgiler, ekran ve izin ayarları, sistem kısayolları, önerilen uygulamalar.
@@ -145,6 +146,14 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
+  Future<void> _openAppearance() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AppearancePage(settings: widget.settings),
+      ),
+    );
+  }
+
   Future<void> _requestNotification() async {
     try {
       final status = await Permission.notification.request();
@@ -248,13 +257,13 @@ class _DevicePageState extends State<DevicePage> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.brightness_6_rounded, color: AppColors.muted, size: 20),
+                    Icon(Icons.brightness_6_rounded, color: AppColors.muted, size: 20),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text('Uygulama parlaklığı', style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
                     Text('%${(_brightness * 100).round()}',
-                        style: const TextStyle(color: AppColors.muted)),
+                        style: TextStyle(color: AppColors.muted)),
                   ],
                 ),
                 Slider(
@@ -288,15 +297,27 @@ class _DevicePageState extends State<DevicePage> {
                 const RowDivider(),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  onTap: _openAppearance,
+                  leading: Icon(Icons.palette_rounded, color: AppColors.muted),
+                  title: const Text('Görünüm', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                    'Tema · logo rengi',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                ),
+                const RowDivider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
                   onTap: _openNotificationSettings,
-                  leading: const Icon(Icons.notifications_rounded, color: AppColors.muted),
+                  leading: Icon(Icons.notifications_rounded, color: AppColors.muted),
                   title: const Text('Bildirimler ve Uyarılar',
                       style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text(
+                  subtitle: Text(
                     'Isınma, pil, depolama uyarıları · eşikler · titreşim',
                     style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                  trailing: Icon(Icons.chevron_right_rounded, color: AppColors.muted),
                 ),
                 const RowDivider(),
                 const SizedBox(height: 12),
@@ -335,7 +356,7 @@ class _DevicePageState extends State<DevicePage> {
                           const SizedBox(height: 2),
                           Text(
                             formatBytes(_storage?.cacheBytes ?? 0),
-                            style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                            style: TextStyle(color: AppColors.muted, fontSize: 13),
                           ),
                         ],
                       ),
@@ -362,9 +383,9 @@ class _DevicePageState extends State<DevicePage> {
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                       subtitle: Text(
                         _features[i].description,
-                        style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                        style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                       ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                      trailing: Icon(Icons.chevron_right_rounded, color: AppColors.muted),
                     ),
                     if (i != _features.length - 1) const RowDivider(),
                   ],
@@ -385,10 +406,10 @@ class _DevicePageState extends State<DevicePage> {
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                       subtitle: Text(
                         '${_recommended[i].description}\n${_recommended[i].sourceLabel}',
-                        style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                        style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                       ),
                       isThreeLine: true,
-                      trailing: const Icon(Icons.open_in_new_rounded, color: AppColors.muted, size: 20),
+                      trailing: Icon(Icons.open_in_new_rounded, color: AppColors.muted, size: 20),
                     ),
                     if (i != _recommended.length - 1) const RowDivider(),
                   ],
@@ -405,7 +426,7 @@ class _DevicePageState extends State<DevicePage> {
                 const Text('TerminalF', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                 const SizedBox(height: 2),
                 Text('Sürüm $_version',
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
               ],
             ),
           ),

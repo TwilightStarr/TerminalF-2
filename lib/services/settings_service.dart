@@ -63,4 +63,24 @@ class SettingsService {
     final p = await SharedPreferences.getInstance();
     await p.setDouble(key, value);
   }
+
+  Future<String> readString(String key, {required String fallback}) async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(key) ?? fallback;
+  }
+
+  Future<void> writeString(String key, String value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(key, value);
+  }
+
+  Future<int> readInt(String key, {required int fallback}) async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt(key) ?? fallback;
+  }
+
+  Future<void> writeInt(String key, int value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(key, value);
+  }
 }

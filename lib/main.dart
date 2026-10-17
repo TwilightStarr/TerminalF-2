@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'core/theme.dart';
+import 'state/app_settings.dart';
 
 export 'app.dart' show TerminalApp;
 
@@ -22,18 +23,19 @@ Future<void> main() async {
     return true;
   };
 
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppColors.surface,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+  // Kayıtlı tema ilk karede doğru görünsün (yanıp sönme olmasın) diye
+  // tercihler uygulama çizilmeden önce okunur.
+  final settings = AppSettings();
+  try {
+    await settings.load();
+  } catch (_) {
+    // Okunamazsa varsayılan (siyah-beyaz) tema ile devam edilir.
+  }
+  AppTheme.applySystemChrome();
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  runApp(const TerminalApp());
+  runApp(TerminalApp(settings: settings));
 }

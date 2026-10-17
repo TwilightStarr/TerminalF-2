@@ -66,7 +66,7 @@ class OptimizePage extends StatelessWidget {
                   IconButton(
                     tooltip: 'İşlem günlüğü',
                     onPressed: () => showLogSheet(context, control),
-                    icon: const Icon(Icons.receipt_long_rounded, color: AppColors.muted),
+                    icon: Icon(Icons.receipt_long_rounded, color: AppColors.muted),
                   ),
                 ],
               ),
@@ -115,7 +115,7 @@ class OptimizePage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 6, 4, 8),
         child: Text(
           category.label.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.muted,
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -181,12 +181,12 @@ class _AccessCard extends StatelessWidget {
                   ready
                       ? 'Profiller ve ayarlar kullanıma hazır.'
                       : 'Optimizasyon için tek seferlik kurulum gerekiyor. Dokunun.',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          Icon(Icons.chevron_right_rounded, color: AppColors.muted),
         ],
       ),
     );
@@ -240,7 +240,7 @@ class _ProfileCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             profile.description,
-            style: const TextStyle(color: AppColors.muted, fontSize: 13.5, height: 1.4),
+            style: TextStyle(color: AppColors.muted, fontSize: 13.5, height: 1.4),
           ),
           const SizedBox(height: 14),
           Row(
@@ -317,11 +317,11 @@ class _TweakRow extends StatelessWidget {
                   tweak.description,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.35),
+                  style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.35),
                 ),
                 if (tweak.isToggle && state == TweakState.unknown) ...[
                   const SizedBox(height: 4),
-                  const Text('Durum okunamadı', style: TextStyle(color: AppColors.warn, fontSize: 12)),
+                  Text('Durum okunamadı', style: TextStyle(color: AppColors.warn, fontSize: 12)),
                 ],
               ],
             ),

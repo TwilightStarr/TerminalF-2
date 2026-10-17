@@ -121,7 +121,7 @@ class _SetupBody extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       control.error!,
-                      style: const TextStyle(color: AppColors.warn, fontSize: 13),
+                      style: TextStyle(color: AppColors.warn, fontSize: 13),
                     ),
                   ],
                   const SizedBox(height: 18),
@@ -201,7 +201,7 @@ class _Step extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 const SizedBox(height: 2),
-                Text(detail, style: const TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35)),
+                Text(detail, style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.35)),
               ],
             ),
           ),

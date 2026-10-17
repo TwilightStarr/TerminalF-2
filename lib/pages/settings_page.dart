@@ -221,7 +221,7 @@ class _SwitchRow extends StatelessWidget {
             children: [
               Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text(subtitle, style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
+              Text(subtitle, style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
             ],
           ),
         ),
@@ -263,7 +263,7 @@ class _SliderRow extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
-              Text(valueLabel, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+              Text(valueLabel, style: TextStyle(color: AppColors.muted, fontSize: 13)),
             ],
           ),
           Slider(

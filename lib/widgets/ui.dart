@@ -58,7 +58,7 @@ class SectionHeader extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.text,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
@@ -74,10 +74,10 @@ class SectionHeader extends StatelessWidget {
 
 /// İnce yatay ilerleme çubuğu.
 class MeterBar extends StatelessWidget {
-  const MeterBar({super.key, required this.value, this.color = AppColors.primary, this.height = 8});
+  const MeterBar({super.key, required this.value, this.color, this.height = 8});
 
   final double value;
-  final Color color;
+  final Color? color;
   final double height;
 
   @override
@@ -92,7 +92,7 @@ class MeterBar extends StatelessWidget {
             Container(color: AppColors.outline),
             FractionallySizedBox(
               widthFactor: v,
-              child: Container(color: color),
+              child: Container(color: color ?? AppColors.primary),
             ),
           ],
         ),
@@ -110,7 +110,7 @@ class StatTile extends StatelessWidget {
     required this.value,
     this.caption,
     this.ratio,
-    this.color = AppColors.primary,
+    this.color,
   });
 
   final IconData icon;
@@ -118,10 +118,11 @@ class StatTile extends StatelessWidget {
   final String value;
   final String? caption;
   final double? ratio;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? AppColors.primary;
     return AppCard(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -137,7 +138,7 @@ class StatTile extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
                 ),
               ),
             ],
@@ -155,7 +156,7 @@ class StatTile extends StatelessWidget {
               caption!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ],
           if (ratio != null) ...[
@@ -192,7 +193,7 @@ class InfoRow extends StatelessWidget {
         children: [
           Expanded(
             flex: 4,
-            child: Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 14)),
+            child: Text(label, style: TextStyle(color: AppColors.muted, fontSize: 14)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -228,7 +229,7 @@ class RowDivider extends StatelessWidget {
   const RowDivider({super.key});
   @override
   Widget build(BuildContext context) =>
-      const Divider(height: 1, thickness: 1, color: AppColors.outline);
+      Divider(height: 1, thickness: 1, color: AppColors.outline);
 }
 
 /// Ana eylem düğmesi (marka gradyanı).
@@ -256,7 +257,7 @@ class PrimaryButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (busy)
-          const SizedBox(
+          SizedBox(
             width: 18,
             height: 18,
             child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.bg),
@@ -269,7 +270,7 @@ class PrimaryButton extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.bg,
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -307,16 +308,17 @@ class SoftButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
-    this.color = AppColors.text,
+    this.color,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? AppColors.text;
     final enabled = onPressed != null;
     return Opacity(
       opacity: enabled ? 1 : 0.5,
@@ -429,7 +431,7 @@ class HealthRing extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              const Text('/ 100', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('/ 100', style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ],
           ),
         ],
@@ -487,11 +489,11 @@ Future<bool> confirmDialog(
       backgroundColor: AppColors.surfaceHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-      content: Text(message, style: const TextStyle(color: AppColors.muted, height: 1.4)),
+      content: Text(message, style: TextStyle(color: AppColors.muted, height: 1.4)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Vazgeç', style: TextStyle(color: AppColors.muted)),
+          child: Text('Vazgeç', style: TextStyle(color: AppColors.muted)),
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),

@@ -42,13 +42,35 @@ class _TerminalAppState extends State<TerminalApp> {
     _control.taskNotificationsEnabled = () => _settings.taskNotifications;
     _live.start();
     _control.init();
+    _appearanceKey = _settings.appearanceKey;
+    _settings.addListener(_onSettingsChanged);
     _settings.load();
     _notifier.init();
     _monitor.start();
   }
 
+  String _appearanceKey = '';
+
+  /// Tema ya da logo rengi değişince bütün arayüzü, durumunu (sekme, kaydırma
+  /// vb.) bozmadan yeniden çizer. Renkler `AppColors` üzerinden okunduğu için
+  /// yalnızca `ThemeData` değişimi yetmez.
+  void _onSettingsChanged() {
+    final key = _settings.appearanceKey;
+    if (key == _appearanceKey) return;
+    _appearanceKey = key;
+    AppTheme.applySystemChrome();
+    setState(() {});
+    void visit(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(visit);
+    }
+
+    (context as Element).visitChildren(visit);
+  }
+
   @override
   void dispose() {
+    _settings.removeListener(_onSettingsChanged);
     _monitor.dispose();
     _live.dispose();
     _control.dispose();
@@ -61,9 +83,7 @@ class _TerminalAppState extends State<TerminalApp> {
     return MaterialApp(
       title: 'TerminalF',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
+      theme: AppTheme.current,
       home: AppShell(
         live: _live,
         control: _control,

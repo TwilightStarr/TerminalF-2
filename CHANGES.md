@@ -1,3 +1,13 @@
+# Görünüm güncellemesi
+
+- Yeni **Görünüm** sayfası (Cihaz > Ayarlar > Görünüm): 7 hazır tema (Siyah & Beyaz, Beyaz & Siyah, Neon Turkuaz, Okyanus, Gün Batımı, Orman, Mor).
+- **Varsayılan tema artık siyah-beyaz**; karşılama ekranı ve logo da buna uyar. Eski turkuaz görünüm "Neon Turkuaz" olarak duruyor.
+- **Logo rengi** değiştirilebilir: tema rengi, 11 düz/gradyan hazır renk veya ton + açıklık çubuklarıyla özel renk. Ana ekran, Cihaz sayfası ve karşılamadaki logo birlikte değişir.
+- Seçimler kaydedilir ve uygulama açılırken ilk kareden itibaren uygulanır.
+- Teknik: `AppColors` artık sabit (const) değil, seçili palette bağlı; tema değişince arayüz durumu bozulmadan yeniden çizilir. Yeni testler: `test/appearance_test.dart`.
+
+---
+
 # CHANGES — 0.2.0
 
 ## Verim

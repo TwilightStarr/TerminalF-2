@@ -52,7 +52,7 @@ Future<void> showLogSheet(BuildContext context, ControlController control) {
               ),
               Expanded(
                 child: lines.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'Henüz bir işlem yapılmadı.',
                           style: TextStyle(color: AppColors.muted),

@@ -122,12 +122,12 @@ class _AppsPageState extends State<AppsPage> {
                 IconButton(
                   tooltip: 'Dondurulmuş uygulamalar',
                   onPressed: _openFrozen,
-                  icon: const Icon(Icons.ac_unit_rounded, color: AppColors.muted),
+                  icon: Icon(Icons.ac_unit_rounded, color: AppColors.muted),
                 ),
                 IconButton(
                   tooltip: 'Yenile',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh_rounded, color: AppColors.muted),
+                  icon: Icon(Icons.refresh_rounded, color: AppColors.muted),
                 ),
               ],
             ),
@@ -137,16 +137,16 @@ class _AppsPageState extends State<AppsPage> {
             child: TextField(
               controller: _searchController,
               onChanged: (v) => setState(() => _query = v),
-              style: const TextStyle(color: AppColors.text),
+              style: TextStyle(color: AppColors.text),
               cursorColor: AppColors.primary,
               decoration: InputDecoration(
                 hintText: 'Uygulama ara',
-                hintStyle: const TextStyle(color: AppColors.muted),
-                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+                hintStyle: TextStyle(color: AppColors.muted),
+                prefixIcon: Icon(Icons.search_rounded, color: AppColors.muted),
                 suffixIcon: _query.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close_rounded, color: AppColors.muted),
+                        icon: Icon(Icons.close_rounded, color: AppColors.muted),
                         onPressed: () {
                           _searchController.clear();
                           setState(() => _query = '');
@@ -157,11 +157,11 @@ class _AppsPageState extends State<AppsPage> {
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: AppColors.outline),
+                  borderSide: BorderSide(color: AppColors.outline),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: AppColors.primary),
+                  borderSide: BorderSide(color: AppColors.primary),
                 ),
               ),
             ),
@@ -173,10 +173,10 @@ class _AppsPageState extends State<AppsPage> {
                 Expanded(
                   child: Text(
                     _loading ? 'Yükleniyor…' : '${list.length} uygulama',
-                    style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                    style: TextStyle(color: AppColors.muted, fontSize: 13),
                   ),
                 ),
-                const Text('Sistem uygulamaları', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+                Text('Sistem uygulamaları', style: TextStyle(color: AppColors.muted, fontSize: 13)),
                 const SizedBox(width: 6),
                 Switch(value: _showSystem, onChanged: _setShowSystem),
               ],
@@ -201,7 +201,7 @@ class _AppsPageState extends State<AppsPage> {
                 ? 'Uygulama listesi alınamadı.\nBu özellik yalnızca Android\'de çalışır.'
                 : 'Aramanızla eşleşen uygulama yok.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted, height: 1.45),
+            style: TextStyle(color: AppColors.muted, height: 1.45),
           ),
         ),
       );
@@ -256,12 +256,12 @@ class _AppTile extends StatelessWidget {
                     app.packageName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.more_horiz_rounded, color: AppColors.muted),
+            Icon(Icons.more_horiz_rounded, color: AppColors.muted),
           ],
         ),
       ),
@@ -286,7 +286,7 @@ class _AppIcon extends StatelessWidget {
         child: (b == null || b.isEmpty)
             ? Container(
                 color: AppColors.surfaceHigh,
-                child: const Icon(Icons.android_rounded, color: AppColors.muted),
+                child: Icon(Icons.android_rounded, color: AppColors.muted),
               )
             : Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true, cacheWidth: 96),
       ),
@@ -416,7 +416,7 @@ class _ActionsSheetState extends State<_ActionsSheet> {
                         app.packageName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                        style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                       ),
                     ],
                   ),
@@ -612,11 +612,11 @@ class _FrozenSheetState extends State<_FrozenSheet> {
             ),
             Expanded(
               child: _error != null
-                  ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.muted)))
+                  ? Center(child: Text(_error!, style: TextStyle(color: AppColors.muted)))
                   : packages == null
                       ? const Center(child: CircularProgressIndicator())
                       : packages.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text('Dondurulmuş uygulama yok.',
                                   style: TextStyle(color: AppColors.muted)),
                             )
