@@ -15,7 +15,7 @@ dependencies:
   # Olcum ve cihaz bilgisi
   battery_plus: ^6.2.1
   thermal: ^1.1.12               # pil sicakligi (yalnizca Android)
-  device_info_plus: ^11.2.0
+  device_info_plus: ^12.4.0
   network_info_plus: ^5.0.3
   path_provider: ^2.1.5
 
