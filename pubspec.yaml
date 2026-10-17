@@ -28,7 +28,7 @@ dependencies:
 
   # Bildirimler ve surum bilgisi
   flutter_local_notifications: ^18.0.1
-  package_info_plus: ^8.1.2
+  package_info_plus: ^9.0.1
 
   # Uygulama yonetimi ve sistem kisayollari
   installed_apps: ^2.0.0
