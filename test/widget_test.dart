@@ -123,7 +123,10 @@ void main() {
 
   testWidgets('İlk açılışta karşılama görünür ve izin bir kez istenir', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(1080, 2400);
+    // Testlerde Ahem yazı tipi her harfi tam kare çizer; karşılama metinleri
+    // bu yüzden çok satıra bölünür ve buton 800 dp'lik ekranın dışına taşar.
+    // Ekran bilerek uzun tutulur ve buton ayrıca görünür yapılır.
+    tester.view.physicalSize = const Size(1080, 6000);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -149,7 +152,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('TerminalF\'e hoş geldiniz'), findsOneWidget);
-    await tester.tap(find.text('Bildirimlere İzin Ver ve Başla'));
+    final startButton = find.text('Bildirimlere İzin Ver ve Başla');
+    await tester.ensureVisible(startButton);
+    await tester.pump();
+    await tester.tap(startButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 600));
