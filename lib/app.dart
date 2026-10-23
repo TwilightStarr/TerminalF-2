@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/theme.dart';
 import 'pages/apps_page.dart';
 import 'pages/device_page.dart';
+import 'pages/game_page.dart';
 import 'pages/home_page.dart';
 import 'pages/optimize_page.dart';
 import 'services/notification_service.dart';
@@ -10,6 +11,7 @@ import 'services/startup_service.dart';
 import 'state/alert_monitor.dart';
 import 'state/app_settings.dart';
 import 'state/control_controller.dart';
+import 'state/game_mode_controller.dart';
 import 'state/live_stats.dart';
 import 'utils/haptics.dart';
 import 'utils/motion.dart';
@@ -36,6 +38,7 @@ class _TerminalAppState extends State<TerminalApp> with SingleTickerProviderStat
   late final LiveStats _live = widget.live ?? LiveStats();
   late final ControlController _control = widget.control ?? ControlController();
   late final AppSettings _settings = widget.settings ?? AppSettings();
+  late final GameModeController _game = GameModeController(control: _control);
   late final Notifier _notifier = widget.notifier ?? NotificationService();
   late final AlertMonitor _monitor =
       AlertMonitor(live: _live, notifier: _notifier, settings: _settings);
@@ -80,6 +83,7 @@ class _TerminalAppState extends State<TerminalApp> with SingleTickerProviderStat
     _themeFade.dispose();
     _monitor.dispose();
     _live.dispose();
+    _game.dispose();
     _control.dispose();
     _settings.dispose();
     super.dispose();
@@ -98,6 +102,7 @@ class _TerminalAppState extends State<TerminalApp> with SingleTickerProviderStat
       home: AppShell(
         live: _live,
         control: _control,
+        game: _game,
         settings: _settings,
         notifier: _notifier,
       ),
@@ -113,12 +118,14 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.live,
     required this.control,
+    required this.game,
     required this.settings,
     required this.notifier,
   });
 
   final LiveStats live;
   final ControlController control;
+  final GameModeController game;
   final AppSettings settings;
   final Notifier notifier;
 
@@ -164,6 +171,8 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
         return OptimizePage(control: widget.control);
       case 2:
         return AppsPage(control: widget.control);
+      case 3:
+        return GamePage(control: widget.control, game: widget.game);
       default:
         return DevicePage(
           live: widget.live,
@@ -202,7 +211,7 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
         },
         child: IndexedStack(
           index: _index,
-          children: [for (var i = 0; i < 4; i++) _pageAt(i)],
+          children: [for (var i = 0; i < 5; i++) _pageAt(i)],
         ),
       ),
       bottomNavigationBar: NavigationBar(
@@ -232,6 +241,11 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
             icon: Icon(Icons.apps_outlined),
             selectedIcon: Icon(Icons.apps_rounded),
             label: 'Uygulamalar',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(Icons.sports_esports_rounded),
+            label: 'Oyun',
           ),
           NavigationDestination(
             icon: Icon(Icons.smartphone_outlined),

@@ -1,3 +1,27 @@
+# Oyun Modu 2 — ölçüm, teşhis ve otomatik geri alma
+
+- **Cihazda izleyici:** Oyun Modu açılınca telefonda küçük bir betik başlar (Terminal kapansa da çalışır). Oyun ön plandayken 10 sn'de bir **gerçek FPS** (SurfaceFlinger kare zamanları), **ısıl durum** ve **büyük çekirdek hızını** kaydeder; oyun ~40 sn ön planda olmazsa tüm ayarları **kendiliğinden geri alır**. Geri alma başarılıysa/başarısızsa işaret dosyasına yazar; Terminal açılınca okunur (başarısızsa oturum saklanır, "Geri Al" kalır).
+- **Son oyun oturumu raporu:** süre, ortalama/en düşük FPS, en yüksek ısıl durum, büyük çekirdek hızı ve **olası darboğaz teşhisi** (ısıl kısıtlama / işlemci sınırlı / GPU-bekleme). Teşhis sezgiseldir ve "olası" der; okunamayan değer "okunamadı" yazar.
+- **Hazır ayarlar:** Serin ve uzun pil (30 FPS, %50), Dengeli (60 FPS, %60), En yüksek akıcılık (90 FPS, %75).
+- **Yeni seçenekler (hepsi eski değer kaydedilip geri alınır):** sistem animasyonlarını kapat, bildirimleri sustur (Rahatsız Etme), oyun kapanınca otomatik geri al.
+- **Ön plan algılama denetimi:** Durum kartı, `dumpsys window` çıktısının bu cihazda okunabildiğini gösterir.
+- Güvenlik: betiğe yalnızca doğrulanmış paket adı ve doğrulanmış eski değerler girer; sonlandırmadan önce PID'in gerçekten izleyici olduğu doğrulanır; oyun hiç ön plana gelmezse izleyici GERİ ALMADAN çıkar (ön plan algılanamıyorsa mod oyun sırasında kendiliğinden kapanmasın).
+- Yeni bağımlılık YOK (`pubspec.yaml` değişmedi). Yeni testler: `test/game_probe_test.dart`, `test/game_watchdog_test.dart`; `game_mode_test.dart` ve `game_mode_controller_test.dart` genişletildi.
+- Doğrulama notu: Flutter SDK bu ortamda yok; Dart kodu `flutter analyze/test` ile ÇALIŞTIRILAMADI. İzleyici betiği ise gerçek bir `sh` ile sahte Android komutları kullanılarak çalıştırıldı (örnekleme, geri alma, "hiç görülmedi" ve "geri alma başarısız" yolları). İlk CI çıktısına bakın.
+
+---
+
+# Oyun Modu
+
+- Yeni **Oyun** sekmesi (varsayılan oyun: 9Kings, `com.playdigious.ninekings`; paket adı değiştirilebilir).
+- Kare hızı üst sınırı (30/60/90), oyun çözünürlüğü (Tam/%75/%60/%50), ekranı 60/90 Hz'e kilitleme, arka plan temizliği.
+- Çözünürlük iki yolla: **Yalnız oyun** (Android GameManager, `cmd game set`) ve **Tüm ekran** (`wm size` + `wm density`).
+- Güvenlik: değişiklikten ÖNCE eski değerler diske yazılır; **Geri Al** her şeyi eski haline getirir (uygulama kapansa bile). Geri alma başarısızsa kayıt silinmez, tekrar denenebilir.
+- Dürüst raporlama: cihazın desteklemediği adımlar "desteklenmiyor" diye işaretlenir, başarı uydurulmaz. Etkin ekran Hz'i okunup gösterilir.
+- Yeni testler: `test/game_mode_test.dart`, `test/game_mode_controller_test.dart`.
+
+---
+
 # Görünüm güncellemesi
 
 - Yeni **Görünüm** sayfası (Cihaz > Ayarlar > Görünüm): 18 hazır tema. Koyu: Siyah & Beyaz, Neon Turkuaz, Okyanus, Gün Batımı, Orman, Mor, Kızıl, Altın, Buz, Gül, Nord, Drakula, Matrix. Açık: Beyaz & Siyah, Gökyüzü, Nane, Krem, Lavanta.
