@@ -284,14 +284,14 @@ jobs:
           ls -la build/app/outputs/flutter-apk/app-release.apk
 
       - name: APK'yi yukle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: app-release-apk
           path: build/app/outputs/flutter-apk/TerminalF-v${{ steps.ver.outputs.version }}.apk
 
       - name: GitHub Release olustur (main'e her push)
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: TerminalF v${{ steps.ver.outputs.version }}
