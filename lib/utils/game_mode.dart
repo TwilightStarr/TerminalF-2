@@ -11,8 +11,9 @@ import 'dart:convert';
 
 import 'shell_utils.dart';
 
-/// Oyunun paket adı.
-const String kNineKingsPackage = 'com.playdigious.ninekings';
+/// Yapılandırma için yer tutucu paket adı (oyun seçilmediyse). Arayüz,
+/// kullanıcı bir oyun eklemeden bu paketi göstermez ya da başlatmaz.
+const String kDefaultGamePackage = 'com.playdigious.ninekings';
 
 final RegExp _pkgPattern = RegExp(r'^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$');
 final RegExp _safeValue = RegExp(r'^[A-Za-z0-9._-]+$');
@@ -133,10 +134,44 @@ int scaledDensity(int physicalDensity, double scale) {
 /// Oyun-başına çözünürlük (GameManager) yöntemi mi, tüm ekran (`wm size`) mi?
 enum ResolutionMethod { perGame, wholeScreen }
 
+/// Android GameManager güç profili. `battery` en serin, `performance` en sıcak
+/// profildir; birçok cihazda `performance` işlemci/GPU hızını yükseltir.
+enum GamePower { battery, standard, performance }
+
+extension GamePowerInfo on GamePower {
+  /// `cmd game` komutuna verilen değer.
+  String get arg => name;
+
+  String get label {
+    switch (this) {
+      case GamePower.battery:
+        return 'Serin (pil)';
+      case GamePower.standard:
+        return 'Standart';
+      case GamePower.performance:
+        return 'Performans';
+    }
+  }
+
+  String get hint {
+    switch (this) {
+      case GamePower.battery:
+        return 'Sistem oyunu enerji tasarruflu çalıştırır; ısınma en az.';
+      case GamePower.standard:
+        return 'Üreticinin varsayılan oyun davranışı.';
+      case GamePower.performance:
+        return 'İşlemci/GPU daha çok çalışır; daha akıcı ama belirgin daha sıcak.';
+    }
+  }
+}
+
+/// Pil sıcaklığı koruması için seçilebilir eşikler (°C). 0 = kapalı.
+const List<int> kGuardTempChoices = [0, 38, 40, 42, 44];
+
 /// Kullanıcının seçtiği oyun modu ayarları.
 class GameModeConfig {
   const GameModeConfig({
-    this.package = kNineKingsPackage,
+    this.package = kDefaultGamePackage,
     this.targetFps = 90,
     this.scale = 0.6,
     this.method = ResolutionMethod.perGame,
@@ -147,6 +182,9 @@ class GameModeConfig {
     this.dnd = false,
     this.dimScreen = false,
     this.cpuCap = false,
+    this.powerProfile = GamePower.performance,
+    this.batterySaver = false,
+    this.guardTempC = 40,
   });
 
   final String package;
@@ -180,6 +218,15 @@ class GameModeConfig {
   /// root ile; hız dalgalanması ve ısıl kısıtlama azalır).
   final bool cpuCap;
 
+  /// GameManager güç profili (serin/standart/performans).
+  final GamePower powerProfile;
+
+  /// Oyun boyunca sistemin Pil Tasarrufu modunu açar (eski değer geri yazılır).
+  final bool batterySaver;
+
+  /// Pil sıcaklığı bu değere (°C) ulaşınca izleyici ek önlem alır; 0 = kapalı.
+  final int guardTempC;
+
   bool get reducesResolution => scale < 0.999;
 
   /// Ekran kilidi Hz değeri; 30 FPS hedefinde 60 Hz'e (30'un katı) kilitlenir.
@@ -197,6 +244,9 @@ class GameModeConfig {
     bool? dnd,
     bool? dimScreen,
     bool? cpuCap,
+    GamePower? powerProfile,
+    bool? batterySaver,
+    int? guardTempC,
   }) {
     return GameModeConfig(
       package: package ?? this.package,
@@ -210,6 +260,9 @@ class GameModeConfig {
       dnd: dnd ?? this.dnd,
       dimScreen: dimScreen ?? this.dimScreen,
       cpuCap: cpuCap ?? this.cpuCap,
+      powerProfile: powerProfile ?? this.powerProfile,
+      batterySaver: batterySaver ?? this.batterySaver,
+      guardTempC: guardTempC ?? this.guardTempC,
     );
   }
 
@@ -225,17 +278,20 @@ class GameModeConfig {
         'dnd': dnd,
         'dimScreen': dimScreen,
         'cpuCap': cpuCap,
+        'powerProfile': powerProfile.name,
+        'batterySaver': batterySaver,
+        'guardTempC': guardTempC,
       };
 
   factory GameModeConfig.fromJson(Map<String, dynamic> json) {
-    final pkg = json['package'] as String? ?? kNineKingsPackage;
+    final pkg = json['package'] as String? ?? kDefaultGamePackage;
     final fps = (json['targetFps'] as num?)?.toInt() ?? 90;
     final scale = (json['scale'] as num?)?.toDouble() ?? 0.6;
     final method = json['method'] == ResolutionMethod.wholeScreen.name
         ? ResolutionMethod.wholeScreen
         : ResolutionMethod.perGame;
     return GameModeConfig(
-      package: isSafePackage(pkg) ? pkg : kNineKingsPackage,
+      package: isSafePackage(pkg) ? pkg : kDefaultGamePackage,
       targetFps: const [30, 60, 90].contains(fps) ? fps : 90,
       scale: scale.clamp(0.4, 1.0),
       method: method,
@@ -246,6 +302,14 @@ class GameModeConfig {
       dnd: json['dnd'] as bool? ?? false,
       dimScreen: json['dimScreen'] as bool? ?? false,
       cpuCap: json['cpuCap'] as bool? ?? false,
+      powerProfile: GamePower.values.firstWhere(
+        (g) => g.name == json['powerProfile'],
+        orElse: () => GamePower.performance,
+      ),
+      batterySaver: json['batterySaver'] as bool? ?? false,
+      guardTempC: kGuardTempChoices.contains((json['guardTempC'] as num?)?.toInt())
+          ? (json['guardTempC'] as num).toInt()
+          : 40,
     );
   }
 
@@ -273,6 +337,10 @@ class GamePreset {
     required this.dnd,
     this.dimScreen = false,
     this.cpuCap = false,
+    this.powerProfile = GamePower.performance,
+    this.batterySaver = false,
+    this.guardTempC = 40,
+    this.icon = 0,
   });
 
   final String id;
@@ -284,6 +352,12 @@ class GamePreset {
   final bool dnd;
   final bool dimScreen;
   final bool cpuCap;
+  final GamePower powerProfile;
+  final bool batterySaver;
+  final int guardTempC;
+
+  /// Arayüzün seçtiği simge sırası (saf mantık katmanı Flutter'a bağlı değil).
+  final int icon;
 
   /// Paket, yöntem ve arka plan seçimini koruyup yalnızca ön ayarın
   /// değerlerini uygular.
@@ -295,6 +369,9 @@ class GamePreset {
         dnd: dnd,
         dimScreen: dimScreen,
         cpuCap: cpuCap,
+        powerProfile: powerProfile,
+        batterySaver: batterySaver,
+        guardTempC: guardTempC,
       );
 
   /// [config] bu ön ayarla birebir aynı mı?
@@ -304,31 +381,71 @@ class GamePreset {
       config.animationsOff == animationsOff &&
       config.dnd == dnd &&
       config.dimScreen == dimScreen &&
-      config.cpuCap == cpuCap;
+      config.cpuCap == cpuCap &&
+      config.powerProfile == powerProfile &&
+      config.batterySaver == batterySaver &&
+      config.guardTempC == guardTempC;
 }
 
-/// Genel Oyun Modu için iki hazır ayar.
+/// Her oyunda kullanılabilen hazır ayarlar (en seriniden en akıcıya).
 const List<GamePreset> kGamePresets = [
+  GamePreset(
+    id: 'ice',
+    title: 'Buz',
+    subtitle: 'En serin: 30 FPS · %40 çözünürlük · serin güç profili · Pil Tasarrufu · '
+        'parlaklık kısık · animasyonlar kapalı · bildirimler sessiz · ısı koruması 38 °C.',
+    targetFps: 30,
+    scale: 0.4,
+    animationsOff: true,
+    dnd: true,
+    dimScreen: true,
+    cpuCap: true,
+    powerProfile: GamePower.battery,
+    batterySaver: true,
+    guardTempC: 38,
+    icon: 0,
+  ),
   GamePreset(
     id: 'cool',
     title: 'Serin',
-    subtitle: '30 FPS · %50 çözünürlük · ekran 60 Hz · parlaklık kısık · animasyonlar kapalı · '
-        'bildirimler sessiz. Root varsa işlemci hızı da sınırlanır.',
+    subtitle: '30 FPS · %50 çözünürlük · serin güç profili · parlaklık kısık · animasyonlar kapalı · '
+        'bildirimler sessiz · ısı koruması 40 °C. Root varsa işlemci hızı da sınırlanır.',
     targetFps: 30,
     scale: 0.5,
     animationsOff: true,
     dnd: true,
     dimScreen: true,
     cpuCap: true,
+    powerProfile: GamePower.battery,
+    batterySaver: false,
+    guardTempC: 40,
+    icon: 1,
   ),
   GamePreset(
     id: 'balanced',
-    title: 'Daha akıcı',
-    subtitle: '60 FPS · %60 çözünürlük · animasyonlar kapalı. Daha akıcı, daha çok ısınır.',
+    title: 'Dengeli',
+    subtitle: '60 FPS · %60 çözünürlük · standart güç profili · animasyonlar kapalı · '
+        'ısı koruması 42 °C. Daha akıcı, daha çok ısınır.',
     targetFps: 60,
     scale: 0.6,
     animationsOff: true,
     dnd: false,
+    powerProfile: GamePower.standard,
+    guardTempC: 42,
+    icon: 2,
+  ),
+  GamePreset(
+    id: 'smooth',
+    title: 'Akıcı',
+    subtitle: '60 FPS · %75 çözünürlük · performans profili · bildirimler sessiz · '
+        'ısı koruması 44 °C. Telefon belirgin ısınır.',
+    targetFps: 60,
+    scale: 0.75,
+    animationsOff: true,
+    dnd: true,
+    powerProfile: GamePower.performance,
+    guardTempC: 44,
+    icon: 3,
   ),
 ];
 
@@ -347,6 +464,9 @@ const List<SettingKey> kBrightnessKeys = [
   SettingKey('system', 'screen_brightness'),
   SettingKey('system', 'screen_brightness_mode'),
 ];
+
+/// Sistem Pil Tasarrufu (0 = kapalı, 1 = açık).
+const SettingKey kLowPowerKey = SettingKey('global', 'low_power');
 
 /// Parlaklık düşürme oranı (mevcut değerin yüzdesi) ve ısı korumasındaki oran.
 const double kDimFraction = 0.6;
@@ -448,7 +568,6 @@ class GameSession {
     this.densityOverride,
     this.changedScreen = false,
     this.cpuMax = const {},
-    this.kind = 'generic',
     required this.startedAtMs,
   });
 
@@ -469,8 +588,6 @@ class GameSession {
   /// uygulandıysa dolu.
   final Map<String, String> cpuMax;
 
-  /// Oturumu hangi mod başlattı: `generic` (Genel Oyun Modu) ya da `nineKings`.
-  final String kind;
   final int startedAtMs;
 
   Map<String, dynamic> toJson() => {
@@ -481,7 +598,6 @@ class GameSession {
         'densityOverride': densityOverride,
         'changedScreen': changedScreen,
         'cpuMax': cpuMax,
-        'kind': kind,
         'startedAtMs': startedAtMs,
       };
 
@@ -499,7 +615,6 @@ class GameSession {
           if (_policyName.hasMatch('${e.key}') && _digits.hasMatch('${e.value}'))
             '${e.key}': '${e.value}',
       },
-      kind: json['kind'] == 'nineKings' ? 'nineKings' : 'generic',
       startedAtMs: (json['startedAtMs'] as num?)?.toInt() ?? 0,
     );
   }
@@ -544,14 +659,19 @@ List<GameStep> buildApplySteps(
 
   // Oyun-başına (Android GameManager) üst sınır + çözünürlük.
   final perGameScale = config.method == ResolutionMethod.perGame && config.reducesResolution;
+  final mode = config.powerProfile.arg;
   steps.add(GameStep(
     'Oyun profili (${config.targetFps} FPS sınırı'
     '${perGameScale ? ', %${(config.scale * 100).round()} çözünürlük' : ''})',
-    'cmd game set --mode performance --fps ${config.targetFps}'
+    'cmd game set --mode $mode --fps ${config.targetFps}'
         '${perGameScale ? ' --downscale ${downscaleArg(config.scale)}' : ''} $pkg',
     optional: true,
   ));
-  steps.add(GameStep('Performans modu', 'cmd game mode performance $pkg', optional: true));
+  steps.add(GameStep(
+    'Güç profili: ${config.powerProfile.label}',
+    'cmd game mode $mode $pkg',
+    optional: true,
+  ));
 
   final hz = config.lockHz;
   if (hz != null) {
@@ -585,6 +705,13 @@ List<GameStep> buildApplySteps(
     if (cmd.isNotEmpty) {
       steps.add(GameStep('İşlemci hızını sınırla (%70)', cmd, optional: true));
     }
+  }
+  if (config.batterySaver) {
+    steps.add(GameStep(
+      'Pil Tasarrufu\'nu aç',
+      'settings put ${kLowPowerKey.namespace} ${kLowPowerKey.key} 1',
+      optional: true,
+    ));
   }
   if (config.dnd) {
     steps.add(GameStep(
@@ -660,6 +787,10 @@ List<GameStep> buildRevertSteps(GameSession session) {
   if (cpu.isNotEmpty) {
     steps.add(GameStep('İşlemci sınırını geri al', cpu.join('; '), optional: true));
   }
+  final lowPower = _restoreCommands(session, const [kLowPowerKey]);
+  if (lowPower.isNotEmpty) {
+    steps.add(GameStep('Pil Tasarrufu ayarını geri al', lowPower.join('; '), optional: true));
+  }
   final zen = _restoreCommands(session, const [kZenKey]);
   if (zen.isNotEmpty) {
     steps.add(GameStep('Rahatsız Etme ayarını geri al', zen.join('; ')));
@@ -675,8 +806,9 @@ List<GameStep> buildRevertSteps(GameSession session) {
   return steps;
 }
 
-/// Isı koruması: oyun sırasında ısıl durum yükselirse izleyicinin uyguladığı
-/// ek önlemler (işlemci sınırı %55'e, parlaklık özgün değerin %35'ine).
+/// Isı koruması: oyun sırasında ısıl durum ya da pil sıcaklığı yükselirse
+/// izleyicinin uyguladığı ek önlemler (Pil Tasarrufu, işlemci sınırı %55'e,
+/// parlaklık özgün değerin %35'ine).
 /// Geri alma, özgün değerleri zaten yazdığı için ayrıca geri alınması gerekmez.
 List<String> buildGuardCommands(GameSession session) {
   final cmds = <String>[];
@@ -689,6 +821,9 @@ List<String> buildGuardCommands(GameSession session) {
     final cmd = cpuCapCommand(policies, kGuardCpuFraction);
     if (cmd.isNotEmpty) cmds.add(cmd);
   }
+  if (session.settings.containsKey(kLowPowerKey.id)) {
+    cmds.add('settings put ${kLowPowerKey.namespace} ${kLowPowerKey.key} 1');
+  }
   const key = 'system:screen_brightness';
   final orig = int.tryParse(session.settings[key] ?? '');
   if (session.settings.containsKey(key) && orig != null && orig > 1) {
@@ -696,4 +831,31 @@ List<String> buildGuardCommands(GameSession session) {
     cmds.add('settings put system screen_brightness_mode 0; settings put system screen_brightness $v');
   }
   return cmds;
+}
+
+/// Oyunun çözünürlük kademeleri (net → bulanık).
+const List<double> kScaleSteps = [1.0, 0.75, 0.6, 0.5, 0.4];
+
+/// Bir sonraki oturum için ayar önerisi.
+class ScaleSuggestion {
+  const ScaleSuggestion(this.scale, this.reason, {this.fps});
+  final double scale;
+  final String reason;
+
+  /// Önerilen kare hızı sınırı (yalnızca değişecekse dolu).
+  final int? fps;
+}
+
+/// En yakın kademenin sırası.
+int scaleIndex(double scale) {
+  var best = 0;
+  var diff = double.infinity;
+  for (var i = 0; i < kScaleSteps.length; i++) {
+    final d = (kScaleSteps[i] - scale).abs();
+    if (d < diff) {
+      diff = d;
+      best = i;
+    }
+  }
+  return best;
 }

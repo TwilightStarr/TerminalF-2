@@ -163,6 +163,7 @@ class _HomePageState extends State<HomePage> {
                     children: [
                 const SectionHeader('Anlık Durum'),
                 _StatGrid(
+                  fitContent: true,
                   children: [
                     StatTile(
                       icon: Icons.memory_rounded,
@@ -443,13 +444,36 @@ class _AllGoodCard extends StatelessWidget {
 
 /// İki sütunlu, sabit oranlı ızgara (kaydırma dış ListView'da).
 class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.children, this.aspect = 1.1});
+  const _StatGrid({required this.children, this.aspect = 1.1, this.fitContent = false});
 
   final List<Widget> children;
   final double aspect;
 
+  /// `true` ise kartlar sabit en-boy oranı yerine içeriğine göre yükselir (aynı
+  /// satırdaki iki kart eşit boyda); kartların altında boş alan kalmaz.
+  final bool fitContent;
+
   @override
   Widget build(BuildContext context) {
+    if (fitContent) {
+      final rows = <Widget>[];
+      for (var i = 0; i < children.length; i += 2) {
+        rows.add(
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: children[i]),
+                const SizedBox(width: 12),
+                Expanded(child: i + 1 < children.length ? children[i + 1] : const SizedBox.shrink()),
+              ],
+            ),
+          ),
+        );
+        if (i + 2 < children.length) rows.add(const SizedBox(height: 12));
+      }
+      return Column(children: rows);
+    }
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,

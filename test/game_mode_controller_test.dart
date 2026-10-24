@@ -7,7 +7,6 @@ import 'package:terminal_flutter/services/shizuku_service.dart';
 import 'package:terminal_flutter/state/control_controller.dart';
 import 'package:terminal_flutter/state/game_mode_controller.dart';
 import 'package:terminal_flutter/utils/game_mode.dart';
-import 'package:terminal_flutter/utils/nine_kings.dart';
 import 'package:terminal_flutter/utils/shell_utils.dart';
 
 class _FakeRoot extends RootService {
@@ -86,7 +85,7 @@ void main() {
     final result = await t.game.start();
     expect(result.ok, isTrue);
     expect(t.game.active, isTrue);
-    expect(t.launched, [kNineKingsPackage]);
+    expect(t.launched, [kDefaultGamePackage]);
 
     final saved = GameSession.decode(t.store.data['game_session']!)!;
     expect(saved.settings['system:peak_refresh_rate'], '120.0');
@@ -115,7 +114,7 @@ void main() {
     final all = t.root.commands.join('\n');
     expect(all, contains('settings put system peak_refresh_rate 120.0'));
     expect(all, contains('settings delete system min_refresh_rate'));
-    expect(all, contains('cmd game reset $kNineKingsPackage'));
+    expect(all, contains('cmd game reset $kDefaultGamePackage'));
   });
 
   test('ikinci kez başlatmak orijinal anlık görüntüyü ezmez', () async {
@@ -182,10 +181,10 @@ void main() {
   test('geçersiz paket adı reddedilir, tam kontrol yoksa işlem yapılmaz', () async {
     final t = await _setup();
     await t.game.updateConfig(const GameModeConfig(package: 'kötü paket'));
-    // kötü paket JSON'dan okunurken varsayılana döner; doğrudan config ile deneyelim:
+    expect(t.game.hasGame, isFalse, reason: 'geçersiz paket kaydedilmez');
+    // Doğrudan geçersiz yapılandırmayla başlatmak da reddedilir:
     final bad = GameModeController(control: t.control, store: _MemStore(), delay: (_) async {});
-    await bad.updateConfig(const GameModeConfig(package: 'a b'));
-    final r = await bad.start();
+    final r = await bad.start(overrideConfig: const GameModeConfig(package: 'a b'));
     expect(r.ok, isFalse);
     expect(t.root.commands.where((c) => c.contains('a b')), isEmpty);
   });
@@ -353,74 +352,102 @@ void main() {
     });
   });
 
-  group('9Kings modu (controller)', () {
-    test('tek tuş: sabit paket, profil çözünürlüğü, oturum türü nineKings', () async {
+  group('her oyun için ayrı profil (controller)', () {
+    const logHot = '1700000000 20 1000000000000 1001900000000 3 3200000 3400000\n'
+        '1700000010 20 1000000000000 1001900000000 3 3200000 3400000\n'
+        '1700000020 20 1000000000000 1001900000000 3 3200000 3400000';
+
+    test('oyun eklenince seçilir, Serin ayarıyla başlar', () async {
       final t = await _setup();
-      await t.game.updateConfig(const GameModeConfig(package: 'a.b'));
-      final r = await t.game.startNineKings();
-      expect(r.ok, isTrue);
-      expect(t.launched, [kNineKingsPackage]);
-      expect(t.game.nineKingsActive, isTrue);
-      expect(
-        t.root.commands.any((c) =>
-            c.startsWith('cmd game set') &&
-            c.contains('--fps 30') &&
-            c.contains('--downscale 0.5') &&
-            c.endsWith(kNineKingsPackage)),
-        isTrue,
-      );
-      expect(t.game.config.package, 'a.b', reason: 'genel ayar bozulmamalı');
-      final saved = GameSession.decode(t.store.data['game_session']!)!;
-      expect(saved.kind, 'nineKings');
+      expect(t.game.hasGame, isFalse);
+      expect(await t.game.addGame('com.x.y', 'Oyun X'), isTrue);
+      expect(t.game.hasGame, isTrue);
+      expect(t.game.selectedName, 'Oyun X');
+      expect(t.game.config.package, 'com.x.y');
+      expect(t.game.config.targetFps, 30);
+      expect(t.game.config.powerProfile, GamePower.battery);
     });
 
-    test('genel mod oturumu nineKings sayılmaz; geri alınca kapanır', () async {
+    test('geçersiz paket adı eklenmez', () async {
       final t = await _setup();
-      await t.game.start(launch: false);
-      expect(t.game.active, isTrue);
-      expect(t.game.nineKingsActive, isFalse);
-      await t.game.stop();
-      await t.game.startNineKings(launch: false);
-      expect(t.game.nineKingsActive, isTrue);
-      await t.game.stop();
-      expect(t.game.nineKingsActive, isFalse);
+      expect(await t.game.addGame('a.b; rm -rf /', 'kötü'), isFalse);
+      expect(t.game.games, isEmpty);
     });
 
-    test('profil kaydedilir ve yeniden açılınca yüklenir', () async {
+    test('her oyunun ayarı ayrı tutulur ve yeniden açılınca yüklenir', () async {
       final t = await _setup();
-      await t.game.updateNineKings(
-        const NineKingsProfile(detail: DetailLevel.strong, fps: 60),
-      );
+      await t.game.addGame('com.a.one', 'Bir');
+      await t.game.updateConfig(t.game.config.copyWith(targetFps: 60, scale: 0.75));
+      await t.game.addGame('com.b.two', 'İki');
+      expect(t.game.config.targetFps, 30);
+      await t.game.selectGame('com.a.one');
+      expect(t.game.config.targetFps, 60);
+
       final again = GameModeController(control: t.control, store: t.store, delay: (_) async {});
       await again.load();
-      expect(again.nineKings.detail, DetailLevel.strong);
-      expect(again.nineKings.fps, 60);
+      expect(again.games.map((g) => g.package), ['com.a.one', 'com.b.two']);
+      expect(again.selectedPackage, 'com.a.one');
+      expect(again.config.scale, 0.75);
     });
 
-    test('önce 9Kings çalıştırıp ısındıysa daha bulanık önerilir ve uygulanır', () async {
+    test('tek dokunuş: seçili oyunun ayarı uygulanır ve o oyun açılır', () async {
       final t = await _setup();
-      await t.game.startNineKings(launch: false);
-      t.root.responder = (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log')
-          ? '1700000000 20 1000000000000 1001900000000 3 3200000 3400000\n'
-              '1700000010 20 1000000000000 1001900000000 3 3200000 3400000\n'
-              '1700000020 20 1000000000000 1001900000000 3 3200000 3400000'
-          : _device(c);
-      await t.game.refreshStats();
-      expect(t.game.nineKingsSuggestion!.level, DetailLevel.strong);
-      await t.game.applyNineKingsSuggestion();
-      expect(t.game.nineKings.detail, DetailLevel.strong);
+      await t.game.addGame('com.x.y', 'Oyun X');
+      final r = await t.game.startSelected();
+      expect(r.ok, isTrue);
+      expect(t.launched, ['com.x.y']);
+      expect(t.game.activeForSelected, isTrue);
+      expect(
+        t.root.commands.any((c) =>
+            c.startsWith('cmd game set --mode battery') &&
+            c.contains('--fps 30') &&
+            c.contains('--downscale 0.5') &&
+            c.endsWith('com.x.y')),
+        isTrue,
+      );
     });
 
-    test('genel mod çalıştırıldıysa 9Kings önerisi çıkmaz', () async {
+    test('oyun silinir; seçili oyun silinince diğeri seçilir', () async {
       final t = await _setup();
-      await t.game.start(launch: false);
-      t.root.responder = (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log')
-          ? '1700000000 20 1000000000000 1001900000000 3 3200000 3400000\n'
-              '1700000010 20 1000000000000 1001900000000 3 3200000 3400000\n'
-              '1700000020 20 1000000000000 1001900000000 3 3200000 3400000'
-          : _device(c);
+      await t.game.addGame('com.a.one', 'Bir');
+      await t.game.addGame('com.b.two', 'İki');
+      await t.game.removeGame('com.b.two');
+      expect(t.game.games.map((g) => g.package), ['com.a.one']);
+      expect(t.game.selectedPackage, 'com.a.one');
+      await t.game.removeGame('com.a.one');
+      expect(t.game.hasGame, isFalse);
+    });
+
+    test('eski tek-oyun ayarı ilk oyun olarak taşınır', () async {
+      final t = await _setup();
+      t.store.data['game_config'] = const GameModeConfig(package: 'com.old.game', targetFps: 60).encode();
+      final again = GameModeController(control: t.control, store: t.store, delay: (_) async {});
+      await again.load();
+      expect(again.selectedPackage, 'com.old.game');
+      expect(again.config.targetFps, 60);
+    });
+
+    test('ısındıysa daha düşük çözünürlük önerilir ve uygulanır', () async {
+      final t = await _setup();
+      await t.game.addGame('com.x.y', 'Oyun X');
+      await t.game.startSelected(launch: false);
+      t.root.responder =
+          (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log') ? logHot : _device(c);
       await t.game.refreshStats();
-      expect(t.game.nineKingsSuggestion, isNull);
+      expect(t.game.suggestion!.scale, 0.4);
+      await t.game.applySuggestion();
+      expect(t.game.config.scale, 0.4);
+    });
+
+    test('öneri yalnızca son oturumun oyunu için çıkar', () async {
+      final t = await _setup();
+      await t.game.addGame('com.a.one', 'Bir');
+      await t.game.startSelected(launch: false);
+      await t.game.addGame('com.b.two', 'İki');
+      t.root.responder =
+          (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log') ? logHot : _device(c);
+      await t.game.refreshStats();
+      expect(t.game.suggestion, isNull);
     });
   });
 }

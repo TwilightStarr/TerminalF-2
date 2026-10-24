@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:installed_apps/app_info.dart';
 
 import '../core/theme.dart';
+import '../services/apps_service.dart';
 import '../state/control_controller.dart';
 import '../state/game_mode_controller.dart';
 import '../utils/game_mode.dart';
 import '../utils/game_probe.dart';
-import '../utils/nine_kings.dart';
 import '../widgets/control_setup_sheet.dart';
 import '../widgets/log_sheet.dart';
 import '../widgets/ui.dart';
 
-/// Oyun Modu sayfası: ağır oyunlarda GPU yükünü, ısınmayı ve pil
-/// tüketimini azaltır; oyun bitince her şeyi eski haline getirir.
+/// Oyun Modu sayfası: istenen HER oyun için tek dokunuşla ısıyı, GPU yükünü ve
+/// pil tüketimini azaltır; oyun bitince her şeyi eski haline getirir. Her oyunun
+/// ayarı ayrı saklanır.
 class GamePage extends StatefulWidget {
   const GamePage({super.key, required this.control, required this.game});
 
@@ -32,7 +34,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    game.load();
+    game.load().then((_) {
+      if (mounted) game.checkInstalled();
+    });
     control.addListener(_probeWhenReady);
     _probeWhenReady();
   }
@@ -71,19 +75,20 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   Future<void> _start({required bool launch}) async {
     if (!await _ensureReady()) return;
-    if (game.config.method == ResolutionMethod.wholeScreen && game.config.reducesResolution) {
+    final cfg = game.config;
+    if (cfg.method == ResolutionMethod.wholeScreen && cfg.reducesResolution) {
       if (!mounted) return;
       final ok = await confirmDialog(
         context,
         title: 'Tüm ekran çözünürlüğü düşürülecek',
-        message: 'Telefonun tamamı düşük çözünürlükte çalışır (yazılar biraz bulanık görünür). '
-            'Oyun bitince "Geri Al"a basmayı unutmayın; eski değerler kayıtlı olduğu için '
-            'uygulamayı kapatsanız bile geri alınabilir.',
+        message: 'Telefonun tamamı oyun boyunca düşük çözünürlükte çalışır (yazılar bulanık görünür). '
+            'Oyun kapanınca kendiliğinden eski haline döner; olmazsa Geri Al\'a basın. Eski '
+            'değerler kayıtlı olduğu için uygulamayı kapatsanız bile geri alınabilir.',
         confirmLabel: 'Uygula',
       );
       if (!ok) return;
     }
-    final result = await game.start(launch: launch);
+    final result = await game.startSelected(launch: launch);
     control.reportDone('Oyun Modu', result.summary, ok: result.ok);
     if (!mounted) return;
     showToast(context, result.summary);
@@ -96,68 +101,35 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     showToast(context, result.ok ? 'Her şey eski haline döndü' : result.summary);
   }
 
-  Future<void> _startNineKings() async {
-    if (!await _ensureReady()) return;
-    if (game.nineKings.wholeScreen) {
-      if (!mounted) return;
-      final ok = await confirmDialog(
-        context,
-        title: 'Tüm ekran çözünürlüğü düşürülecek',
-        message: 'Telefonun tamamı oyun boyunca düşük çözünürlükte çalışır (yazılar bulanık görünür). '
-            'Oyun kapanınca kendiliğinden eski haline döner; olmazsa Geri Al\'a basın.',
-        confirmLabel: 'Başlat',
-      );
-      if (!ok) return;
-    }
-    final result = await game.startNineKings();
-    control.reportDone('9Kings Modu', result.summary, ok: result.ok);
+  Future<void> _pickGame() async {
+    final picked = await showModalBottomSheet<SavedGame>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => _GamePicker(existing: {for (final g in game.games) g.package}),
+    );
+    if (picked == null) return;
+    final ok = await game.addGame(picked.package, picked.name);
     if (!mounted) return;
-    showToast(context, result.summary);
+    if (!ok) showToast(context, 'Geçersiz paket adı.');
   }
 
-  Future<void> _editPackage() async {
-    final controller = TextEditingController(text: game.config.package);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceHigh,
-        title: const Text('Oyun paket adı', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              autocorrect: false,
-              decoration: const InputDecoration(hintText: kNineKingsPackage),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Genel Oyun Modu için oyunun paket adını yazın (Uygulamalar sekmesinde görünür).',
-              style: TextStyle(color: AppColors.muted, fontSize: 12.5),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, kNineKingsPackage),
-            child: const Text('Varsayılan'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Kaydet'),
-          ),
-        ],
-      ),
+  Future<void> _removeSelected() async {
+    final pkg = game.selectedPackage;
+    if (pkg == null) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'Oyunu listeden çıkar',
+      message: '"${game.selectedName}" için kayıtlı Oyun Modu ayarları silinir. Oyunun kendisine '
+          'dokunulmaz.',
+      confirmLabel: 'Çıkar',
+      danger: true,
     );
-    controller.dispose();
-    if (value == null) return;
-    if (!isSafePackage(value)) {
-      if (mounted) showToast(context, 'Geçersiz paket adı.');
-      return;
-    }
-    await game.updateConfig(game.config.copyWith(package: value));
-    game.checkInstalled();
+    if (!ok) return;
+    await game.removeGame(pkg);
   }
 
   @override
@@ -169,6 +141,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         builder: (context, _) {
           final cfg = game.config;
           final busy = game.busy;
+          final has = game.hasGame;
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
             children: [
@@ -184,190 +157,736 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              _NineKingsCard(
-                control: control,
-                game: game,
-                onStart: _startNineKings,
-                onStop: _stop,
-              ),
-              if (busy) ...[
+              const SizedBox(height: 8),
+              if (!has)
+                _EmptyHero(onAdd: _pickGame)
+              else ...[
+                _GameStrip(game: game, busy: busy, onAdd: _pickGame),
                 const SizedBox(height: 12),
-                const ClipRRect(
-                  borderRadius: BorderRadius.all(Radius.circular(6)),
-                  child: LinearProgressIndicator(minHeight: 6),
+                _HeroCard(
+                  control: control,
+                  game: game,
+                  onStart: () => _start(launch: true),
+                  onApply: () => _start(launch: false),
+                  onStop: _stop,
                 ),
-              ],
-              const SectionHeader('Genel Oyun Modu'),
-              _StatusCard(control: control, game: game, onEditPackage: _editPackage),
-              const SizedBox(height: 12),
-              ...[
-              _PresetCard(game: game, busy: busy),
-              const SizedBox(height: 12),
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const _Label('Kare hızı üst sınırı'),
-                    const SizedBox(height: 8),
-                    _Choices<int>(
-                      values: const [30, 60, 90],
-                      selected: cfg.targetFps,
-                      label: (v) => '$v FPS',
-                      onSelected: busy ? null : (v) => game.updateConfig(cfg.copyWith(targetFps: v)),
-                    ),
-                    const SizedBox(height: 16),
-                    const _Label('Oyun çözünürlüğü'),
-                    const SizedBox(height: 8),
-                    _Choices<double>(
-                      values: const [1.0, 0.75, 0.6, 0.5],
-                      selected: cfg.scale,
-                      label: (v) => v >= 1 ? 'Tam' : '%${(v * 100).round()}',
-                      onSelected: busy ? null : (v) => game.updateConfig(cfg.copyWith(scale: v)),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Düşük çözünürlük GPU yükünü, ısınmayı ve pil tüketimini en çok azaltan ayardır. '
-                      'Piksel sanat oyunlarda görüntü kaybı azdır.',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
-                    ),
-                    if (cfg.reducesResolution) ...[
-                      const SizedBox(height: 16),
-                      const _Label('Çözünürlük yöntemi'),
-                      const SizedBox(height: 8),
-                      _Choices<ResolutionMethod>(
-                        values: ResolutionMethod.values,
-                        selected: cfg.method,
-                        label: (v) => v == ResolutionMethod.perGame ? 'Yalnız oyun' : 'Tüm ekran',
-                        onSelected: busy ? null : (v) => game.updateConfig(cfg.copyWith(method: v)),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        cfg.method == ResolutionMethod.perGame
-                            ? 'Güvenli yöntem. Bazı üreticiler/oyunlar desteklemeyebilir; uygulanamazsa '
-                                'sonuç listesinde görürsünüz ve "Tüm ekran"ı deneyebilirsiniz.'
-                            : 'Daha güçlü ve her cihazda çalışır, ama telefonun tamamı geçici olarak '
-                                'düşük çözünürlüğe geçer. Oyun bitince Geri Al\'a basın.',
-                        style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Column(
-                  children: [
-                    _SwitchRow(
-                      title: 'Ekranı ${cfg.targetFps >= 60 ? cfg.targetFps : 60} Hz\'e kilitle',
-                      subtitle: 'Değişken yenileme hızının oyun sırasında yükselmesini engeller; '
-                          'ekran ve GPU daha az çalışır. Oyun bitince geri alınır.',
-                      value: cfg.lockRefreshRate,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(lockRefreshRate: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'Arka planı temizle',
-                      subtitle: 'Başlamadan önce RAM\'i boşaltır; işlemciye daha az rekabet kalır.',
-                      value: cfg.killBackground,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(killBackground: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'Oyun kapanınca otomatik geri al',
-                      subtitle: 'Cihazda küçük bir izleyici çalışır: oyun yaklaşık 40 saniye ön planda '
-                          'olmazsa ayarlar kendiliğinden eski haline döner; oyun boyunca FPS/ısı/işlemci '
-                          'hızı kaydedilir. Terminal kapansa da çalışır.',
-                      value: cfg.autoRevert,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(autoRevert: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'Sistem animasyonlarını kapat',
-                      subtitle: 'Oyun boyunca geçiş efektleri kalkar; ekran birleştirme yükü biraz azalır.',
-                      value: cfg.animationsOff,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(animationsOff: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'Bildirimleri sustur',
-                      subtitle: 'Oyun sırasında Rahatsız Etme (yalnızca öncelikliler) açılır; bildirimler '
-                          'takılma ve ekran uyanması yaratmaz.',
-                      value: cfg.dnd,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(dnd: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'Ekran parlaklığını kıs',
-                      subtitle: 'Oyun boyunca parlaklık mevcut değerin %60\'ına iner. AMOLED ekranda '
-                          'ısınmayı ve pili en çok etkileyen ayarlardan biridir.',
-                      value: cfg.dimScreen,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(dimScreen: v)),
-                    ),
-                    const RowDivider(),
-                    _SwitchRow(
-                      title: 'İşlemci hızını sınırla (root)',
-                      subtitle: 'En güçlü iki çekirdek kümesi %70 hızla çalışır; ısı ve hız dalgalanması azalır. '
-                          'Yalnızca root ile çalışır, Shizuku ile uygulanamaz.',
-                      value: cfg.cpuCap,
-                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(cpuCap: v)),
-                    ),
-                  ],
-                ),
-              ),
-              ],
-              const SizedBox(height: 16),
-              PrimaryButton(
-                label: game.active ? 'Yeniden Uygula ve Başlat' : 'Genel Modu Aç ve Oyunu Başlat',
-                icon: Icons.sports_esports_rounded,
-                busy: busy,
-                onPressed: busy ? null : () => _start(launch: true),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: SoftButton(
-                      label: 'Sadece Uygula',
-                      icon: Icons.tune_rounded,
-                      onPressed: busy ? null : () => _start(launch: false),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SoftButton(
-                      label: 'Geri Al',
-                      icon: Icons.undo_rounded,
-                      color: game.active ? AppColors.warn : null,
-                      onPressed: busy || !game.active ? null : _stop,
-                    ),
+                if (busy) ...[
+                  const SizedBox(height: 12),
+                  const ClipRRect(
+                    borderRadius: BorderRadius.all(Radius.circular(6)),
+                    child: LinearProgressIndicator(minHeight: 6),
                   ),
                 ],
-              ),
-              if (game.lastResult != null && game.lastResult!.steps.isNotEmpty) ...[
-                const SectionHeader('Son İşlem'),
-                _ResultCard(result: game.lastResult!),
-              ],
-              if (control.ready) ...[
-                SectionHeader(
-                  'Son oyun oturumu',
-                  trailing: IconButton(
-                    tooltip: 'Yenile',
-                    onPressed: () {
-                      game.syncWatchdog();
-                      game.refreshStats();
-                    },
-                    icon: Icon(Icons.refresh_rounded, color: AppColors.muted),
+                const SectionHeader('Mod seç'),
+                _PresetList(game: game, busy: busy),
+                if (game.suggestion != null) ...[
+                  const SizedBox(height: 12),
+                  _SuggestionCard(game: game, busy: busy),
+                ],
+                const SectionHeader('Ayrıntılı ayarlar'),
+                ..._groups(cfg, busy),
+                if (game.lastResult != null && game.lastResult!.steps.isNotEmpty) ...[
+                  const SectionHeader('Son işlem'),
+                  _ResultCard(result: game.lastResult!),
+                ],
+                if (control.ready) ...[
+                  SectionHeader(
+                    'Son oyun oturumu',
+                    trailing: IconButton(
+                      tooltip: 'Yenile',
+                      onPressed: () {
+                        game.syncWatchdog();
+                        game.refreshStats();
+                      },
+                      icon: Icon(Icons.refresh_rounded, color: AppColors.muted),
+                    ),
+                  ),
+                  _ReportCard(game: game),
+                ],
+                const SectionHeader('Bilmeniz gerekenler'),
+                const _HonestyCard(),
+                const SizedBox(height: 14),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: busy ? null : _removeSelected,
+                    icon: Icon(Icons.delete_outline_rounded, color: AppColors.muted, size: 20),
+                    label: Text('Bu oyunu listeden çıkar', style: TextStyle(color: AppColors.muted)),
                   ),
                 ),
-                _ReportCard(game: game),
               ],
-              const SectionHeader('Bilmeniz gerekenler'),
-              const _HonestyCard(),
             ],
           );
         },
+      ),
+    );
+  }
+
+  static String _scaleLabel(double v) => v >= 0.999 ? 'Tam çözünürlük' : '%${(v * 100).round()} çözünürlük';
+
+  List<Widget> _groups(GameModeConfig cfg, bool busy) {
+    void set(GameModeConfig next) => game.updateConfig(next);
+    final screenOn = <String>[
+      if (cfg.lockHz != null) 'Ekran ${cfg.lockHz} Hz',
+      if (cfg.dimScreen) 'parlaklık kısık',
+      if (cfg.animationsOff) 'animasyon kapalı',
+    ];
+    final systemOn = <String>[
+      if (cfg.killBackground) 'arka plan temiz',
+      if (cfg.dnd) 'bildirim sessiz',
+      if (cfg.batterySaver) 'pil tasarrufu',
+      if (cfg.cpuCap) 'işlemci sınırı',
+    ];
+    return [
+      _Group(
+        icon: Icons.speed_rounded,
+        title: 'Performans',
+        summary: '${cfg.targetFps} FPS · ${_scaleLabel(cfg.scale)} · ${cfg.powerProfile.label}',
+        children: [
+          const _Label('Kare hızı üst sınırı'),
+          const SizedBox(height: 8),
+          _Choices<int>(
+            values: const [30, 60, 90],
+            selected: cfg.targetFps,
+            label: (v) => '$v FPS',
+            onSelected: busy ? null : (v) => set(cfg.copyWith(targetFps: v)),
+          ),
+          const SizedBox(height: 16),
+          const _Label('Oyun çözünürlüğü'),
+          const SizedBox(height: 8),
+          _Choices<double>(
+            values: kScaleSteps,
+            selected: cfg.scale,
+            label: (v) => v >= 1 ? 'Tam' : '%${(v * 100).round()}',
+            onSelected: busy ? null : (v) => set(cfg.copyWith(scale: v)),
+          ),
+          const SizedBox(height: 6),
+          const _Hint('Düşük çözünürlük GPU yükünü, ısınmayı ve pil tüketimini en çok azaltan ayardır. '
+              'Piksel sanat oyunlarda görüntü kaybı azdır.'),
+          if (cfg.reducesResolution) ...[
+            const SizedBox(height: 16),
+            const _Label('Çözünürlük yöntemi'),
+            const SizedBox(height: 8),
+            _Choices<ResolutionMethod>(
+              values: ResolutionMethod.values,
+              selected: cfg.method,
+              label: (v) => v == ResolutionMethod.perGame ? 'Yalnız oyun' : 'Tüm ekran',
+              onSelected: busy ? null : (v) => set(cfg.copyWith(method: v)),
+            ),
+            const SizedBox(height: 6),
+            _Hint(cfg.method == ResolutionMethod.perGame
+                ? 'Güvenli yöntem. Bazı üreticiler/oyunlar desteklemeyebilir; uygulanamazsa '
+                    'sonuç listesinde görürsünüz ve "Tüm ekran"ı deneyebilirsiniz.'
+                : 'Daha güçlü ve her cihazda çalışır, ama telefonun tamamı geçici olarak '
+                    'düşük çözünürlüğe geçer. Oyun bitince Geri Al\'a basın.'),
+          ],
+          const SizedBox(height: 16),
+          const _Label('Güç profili'),
+          const SizedBox(height: 8),
+          _Choices<GamePower>(
+            values: GamePower.values,
+            selected: cfg.powerProfile,
+            label: (v) => v.label,
+            onSelected: busy ? null : (v) => set(cfg.copyWith(powerProfile: v)),
+          ),
+          const SizedBox(height: 6),
+          _Hint(cfg.powerProfile.hint),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _Group(
+        icon: Icons.smartphone_rounded,
+        title: 'Ekran',
+        summary: screenOn.isEmpty ? 'Ekrana dokunulmaz' : screenOn.join(' · '),
+        children: [
+          _SwitchRow(
+            title: 'Ekranı ${cfg.targetFps >= 60 ? cfg.targetFps : 60} Hz\'e kilitle',
+            subtitle: 'Değişken yenileme hızının oyun sırasında yükselmesini engeller; '
+                'ekran ve GPU daha az çalışır. Oyun bitince geri alınır.',
+            value: cfg.lockRefreshRate,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(lockRefreshRate: v)),
+          ),
+          const RowDivider(),
+          _SwitchRow(
+            title: 'Ekran parlaklığını kıs',
+            subtitle: 'Oyun boyunca parlaklık mevcut değerin %60\'ına iner. AMOLED ekranda '
+                'ısınmayı ve pili en çok etkileyen ayarlardan biridir.',
+            value: cfg.dimScreen,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(dimScreen: v)),
+          ),
+          const RowDivider(),
+          _SwitchRow(
+            title: 'Sistem animasyonlarını kapat',
+            subtitle: 'Oyun boyunca geçiş efektleri kalkar; ekran birleştirme yükü biraz azalır.',
+            value: cfg.animationsOff,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(animationsOff: v)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _Group(
+        icon: Icons.memory_rounded,
+        title: 'Sistem',
+        summary: systemOn.isEmpty ? 'Sisteme dokunulmaz' : systemOn.join(' · '),
+        children: [
+          _SwitchRow(
+            title: 'Arka planı temizle',
+            subtitle: 'Başlamadan önce RAM\'i boşaltır; işlemciye daha az rekabet kalır.',
+            value: cfg.killBackground,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(killBackground: v)),
+          ),
+          const RowDivider(),
+          _SwitchRow(
+            title: 'Bildirimleri sustur',
+            subtitle: 'Oyun sırasında Rahatsız Etme (yalnızca öncelikliler) açılır; bildirimler '
+                'takılma ve ekran uyanması yaratmaz.',
+            value: cfg.dnd,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(dnd: v)),
+          ),
+          const RowDivider(),
+          _SwitchRow(
+            title: 'Pil Tasarrufu\'nu aç',
+            subtitle: 'Sistemin Pil Tasarrufu modu oyun boyunca açık kalır; çoğu cihazda '
+                'işlemciyi ve arka plan işlerini kısar. Oyun bitince eski haline döner.',
+            value: cfg.batterySaver,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(batterySaver: v)),
+          ),
+          const RowDivider(),
+          _SwitchRow(
+            title: 'İşlemci hızını sınırla (root)',
+            subtitle: 'En güçlü iki çekirdek kümesi %70 hızla çalışır; ısı ve hız dalgalanması azalır. '
+                'Yalnızca root ile çalışır, Shizuku ile uygulanamaz.',
+            value: cfg.cpuCap,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(cpuCap: v)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _Group(
+        icon: Icons.shield_moon_rounded,
+        title: 'Isı ve güvenlik',
+        summary: [
+          cfg.autoRevert ? 'otomatik geri alma' : 'geri alma elle',
+          if (cfg.autoRevert) (cfg.guardTempC == 0 ? 'ısı koruması kapalı' : 'koruma ${cfg.guardTempC} °C'),
+        ].join(' · '),
+        children: [
+          _SwitchRow(
+            title: 'Oyun kapanınca otomatik geri al',
+            subtitle: 'Cihazda küçük bir izleyici çalışır: oyun yaklaşık 40 saniye ön planda '
+                'olmazsa ayarlar kendiliğinden eski haline döner; oyun boyunca FPS/ısı/işlemci '
+                'hızı kaydedilir. Terminal kapansa da çalışır.',
+            value: cfg.autoRevert,
+            onChanged: busy ? null : (v) => set(cfg.copyWith(autoRevert: v)),
+          ),
+          const RowDivider(),
+          const SizedBox(height: 12),
+          const _Label('Isı koruması eşiği (pil sıcaklığı)'),
+          const SizedBox(height: 8),
+          _Choices<int>(
+            values: kGuardTempChoices,
+            selected: cfg.guardTempC,
+            label: (v) => v == 0 ? 'Kapalı' : '$v °C',
+            onSelected: busy || !cfg.autoRevert ? null : (v) => set(cfg.copyWith(guardTempC: v)),
+          ),
+          const SizedBox(height: 6),
+          _Hint(cfg.autoRevert
+              ? 'Pil sıcaklığı (ya da sistemin ısıl durumu) art arda iki ölçümde eşiğe ulaşırsa '
+                  'izleyici bir kez daha sıkılaştırır: parlaklığı daha çok kısar, Pil Tasarrufu\'nu '
+                  'açar (seçiliyse) ve root varsa işlemciyi daha çok sınırlar. Oyun bitince hepsi geri alınır.'
+              : 'Isı koruması izleyiciye bağlıdır; açmak için otomatik geri almayı açın.'),
+        ],
+      ),
+    ];
+  }
+}
+
+IconData _presetIcon(int i) {
+  switch (i) {
+    case 0:
+      return Icons.ac_unit_rounded;
+    case 1:
+      return Icons.eco_rounded;
+    case 2:
+      return Icons.speed_rounded;
+    default:
+      return Icons.bolt_rounded;
+  }
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(text, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4));
+}
+
+class _Group extends StatelessWidget {
+  const _Group({
+    required this.icon,
+    required this.title,
+    required this.summary,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final String summary;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(bottom: 14),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          leading: Icon(icon, color: AppColors.muted),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+            ),
+          ),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHero extends StatelessWidget {
+  const _EmptyHero({required this.onAdd});
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.primary.faded(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(Icons.sports_esports_rounded, color: AppColors.primary),
+          ),
+          const SizedBox(height: 14),
+          const Text('Bir oyun seçin', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          const SizedBox(height: 6),
+          Text(
+            'Yüklü herhangi bir oyunu ekleyin. Her oyunun ayarı ayrı saklanır; tek dokunuşla '
+            'ısıyı, GPU yükünü ve pil tüketimini azaltıp oyunu açarız. Oyun kapanınca her şey '
+            'eski haline döner.',
+            style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.45),
+          ),
+          const SizedBox(height: 16),
+          PrimaryButton(label: 'Oyun Seç', icon: Icons.add_rounded, onPressed: onAdd),
+        ],
+      ),
+    );
+  }
+}
+
+class _GameStrip extends StatelessWidget {
+  const _GameStrip({required this.game, required this.busy, required this.onAdd});
+
+  final GameModeController game;
+  final bool busy;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final g in game.games)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(g.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                selected: g.package == game.selectedPackage,
+                onSelected: busy ? null : (_) => game.selectGame(g.package),
+              ),
+            ),
+          ActionChip(
+            avatar: Icon(Icons.add_rounded, size: 18, color: AppColors.text),
+            label: const Text('Oyun ekle'),
+            onPressed: busy ? null : onAdd,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.control,
+    required this.game,
+    required this.onStart,
+    required this.onApply,
+    required this.onStop,
+  });
+
+  final ControlController control;
+  final GameModeController game;
+  final VoidCallback onStart;
+  final VoidCallback onApply;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = control.ready;
+    final busy = game.busy;
+    final here = game.activeForSelected;
+    final otherActive = game.active && !here;
+    final installed = game.installed;
+    final hz = game.displayHz;
+    final color = !ready ? AppColors.warn : (here ? AppColors.good : AppColors.primary);
+    final name = game.selectedName;
+    final letter = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+
+    return AppCard(
+      borderColor: color.faded(0.45),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: color.faded(0.14), borderRadius: BorderRadius.circular(14)),
+                child: Text(letter, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 20)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      game.config.package,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              StatusPill(
+                label: here ? 'Oyun modu AÇIK' : 'Oyun modu kapalı',
+                color: here ? AppColors.good : AppColors.muted,
+              ),
+              if (otherActive) StatusPill(label: 'Başka bir oyunda açık', color: AppColors.warn),
+              if (ready && installed != null)
+                StatusPill(
+                  label: installed ? 'Oyun yüklü' : 'Oyun bulunamadı',
+                  color: installed ? AppColors.good : AppColors.warn,
+                ),
+              if (hz != null) StatusPill(label: 'Ekran ${hz.round()} Hz', color: AppColors.muted),
+              if (here && game.watchdogAlive != null)
+                StatusPill(
+                  label: game.watchdogAlive! ? 'Otomatik geri alma: izliyor' : 'Otomatik geri alma: kapalı',
+                  color: game.watchdogAlive! ? AppColors.good : AppColors.warn,
+                ),
+            ],
+          ),
+          if (!ready) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Oyun modu için tek seferlik kurulum gerekiyor. Başlat\'a basınca kurulum açılır.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
+            ),
+          ],
+          if (game.syncNote != null) ...[
+            const SizedBox(height: 10),
+            Text(game.syncNote!, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.35)),
+          ],
+          const SizedBox(height: 16),
+          PrimaryButton(
+            label: here ? 'Yeniden Uygula ve Başlat' : 'Başlat',
+            icon: Icons.play_arrow_rounded,
+            busy: busy,
+            onPressed: busy ? null : onStart,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: SoftButton(
+                  label: 'Sadece Uygula',
+                  icon: Icons.tune_rounded,
+                  onPressed: busy ? null : onApply,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SoftButton(
+                  label: 'Geri Al',
+                  icon: Icons.undo_rounded,
+                  color: game.active ? AppColors.warn : null,
+                  onPressed: busy || !game.active ? null : onStop,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PresetList extends StatelessWidget {
+  const _PresetList({required this.game, required this.busy});
+
+  final GameModeController game;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = game.config;
+    GamePreset? matched;
+    for (final p in kGamePresets) {
+      if (p.matches(cfg)) matched = p;
+    }
+    return Column(
+      children: [
+        for (final p in kGamePresets)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: AppCard(
+              onTap: busy ? null : () => game.applyPreset(p),
+              borderColor: identical(p, matched) ? AppColors.primary.faded(0.6) : null,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: (identical(p, matched) ? AppColors.primary : AppColors.muted).faded(0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      _presetIcon(p.icon),
+                      size: 20,
+                      color: identical(p, matched) ? AppColors.primary : AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
+                        const SizedBox(height: 3),
+                        _Hint(p.subtitle),
+                      ],
+                    ),
+                  ),
+                  if (identical(p, matched))
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        if (matched == null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: const _Hint('Özel ayar: aşağıdaki ayrıntılı ayarlarda değişiklik yaptınız.'),
+          ),
+      ],
+    );
+  }
+}
+
+class _SuggestionCard extends StatelessWidget {
+  const _SuggestionCard({required this.game, required this.busy});
+
+  final GameModeController game;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final sug = game.suggestion;
+    if (sug == null) return const SizedBox.shrink();
+    final label = sug.fps == null
+        ? 'Uygula: ${sug.scale >= 1 ? 'Tam' : '%${(sug.scale * 100).round()}'} çözünürlük'
+        : 'Uygula: %${(sug.scale * 100).round()} · ${sug.fps} FPS';
+    return AppCard(
+      borderColor: AppColors.warn.faded(0.5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Öneri', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
+          const SizedBox(height: 4),
+          _Hint(sug.reason),
+          const SizedBox(height: 10),
+          SoftButton(
+            label: label,
+            icon: Icons.auto_fix_high_rounded,
+            onPressed: busy ? null : game.applySuggestion,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Yüklü uygulamalardan oyun seçme sayfası.
+class _GamePicker extends StatefulWidget {
+  const _GamePicker({required this.existing});
+
+  final Set<String> existing;
+
+  @override
+  State<_GamePicker> createState() => _GamePickerState();
+}
+
+class _GamePickerState extends State<_GamePicker> {
+  List<AppInfo> _apps = const [];
+  bool _loading = true;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final apps = await AppsService().list(includeSystemApps: false);
+    if (!mounted) return;
+    setState(() {
+      _apps = apps;
+      _loading = false;
+    });
+  }
+
+  List<AppInfo> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return _apps;
+    return _apps
+        .where((a) => a.name.toLowerCase().contains(q) || a.packageName.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _filtered;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (ctx, scroll) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(color: AppColors.outline, borderRadius: BorderRadius.circular(4)),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(22, 14, 22, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Oyun seç', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                autocorrect: false,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  hintText: 'Oyun ara',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  fillColor: AppColors.surfaceHigh,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : list.isEmpty
+                      ? Center(child: Text('Uygulama bulunamadı.', style: TextStyle(color: AppColors.muted)))
+                      : ListView.builder(
+                          controller: scroll,
+                          itemCount: list.length,
+                          itemBuilder: (ctx, i) {
+                            final a = list[i];
+                            final added = widget.existing.contains(a.packageName);
+                            final icon = a.icon;
+                            return ListTile(
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: (icon == null || icon.isEmpty)
+                                      ? Icon(Icons.android_rounded, color: AppColors.muted)
+                                      : Image.memory(icon, fit: BoxFit.cover, gaplessPlayback: true, cacheWidth: 96),
+                                ),
+                              ),
+                              title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                a.packageName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: AppColors.muted, fontSize: 12),
+                              ),
+                              trailing: added ? Icon(Icons.check_rounded, color: AppColors.good) : null,
+                              onTap: () => Navigator.pop(context, SavedGame(a.packageName, a.name)),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -443,272 +962,6 @@ class _SwitchRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Switch(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.control, required this.game, required this.onEditPackage});
-
-  final ControlController control;
-  final GameModeController game;
-  final VoidCallback onEditPackage;
-
-  @override
-  Widget build(BuildContext context) {
-    final ready = control.ready;
-    final active = game.active;
-    final installed = game.installed;
-    final hz = game.displayHz;
-    final color = !ready ? AppColors.warn : (active ? AppColors.good : AppColors.muted);
-
-    return AppCard(
-      borderColor: color.faded(0.4),
-      onTap: ready ? onEditPackage : () => showControlSetup(context, control),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: color.faded(0.14), borderRadius: BorderRadius.circular(12)),
-                child: Icon(ready ? Icons.sports_esports_rounded : Icons.lock_outline_rounded, color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Genel Oyun Modu',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      ready
-                          ? game.config.package
-                          : 'Oyun modu için tek seferlik kurulum gerekiyor. Dokunun.',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppColors.muted, fontSize: 12.5),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(ready ? Icons.edit_rounded : Icons.chevron_right_rounded, color: AppColors.muted, size: 20),
-            ],
-          ),
-          if (ready) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                StatusPill(
-                  label: active ? 'Oyun modu AÇIK' : 'Oyun modu kapalı',
-                  color: active ? AppColors.good : AppColors.muted,
-                ),
-                if (installed != null)
-                  StatusPill(
-                    label: installed ? 'Oyun yüklü' : 'Oyun bulunamadı',
-                    color: installed ? AppColors.good : AppColors.warn,
-                  ),
-                if (hz != null) StatusPill(label: 'Ekran ${hz.round()} Hz', color: AppColors.muted),
-                if (active && game.watchdogAlive != null)
-                  StatusPill(
-                    label: game.watchdogAlive! ? 'Otomatik geri alma: izliyor' : 'Otomatik geri alma: kapalı',
-                    color: game.watchdogAlive! ? AppColors.good : AppColors.warn,
-                  ),
-                StatusPill(
-                  label: game.foregroundPackage != null ? 'Ön plan algılama çalışıyor' : 'Ön plan algılanamıyor',
-                  color: game.foregroundPackage != null ? AppColors.muted : AppColors.warn,
-                ),
-              ],
-            ),
-            if (game.syncNote != null) ...[
-              const SizedBox(height: 10),
-              Text(game.syncNote!, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.35)),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _NineKingsCard extends StatelessWidget {
-  const _NineKingsCard({
-    required this.control,
-    required this.game,
-    required this.onStart,
-    required this.onStop,
-  });
-
-  final ControlController control;
-  final GameModeController game;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = game.nineKings;
-    final busy = game.busy;
-    final active = game.nineKingsActive;
-    final color = active ? AppColors.good : AppColors.primary;
-    final suggestion = game.nineKingsSuggestion;
-
-    return AppCard(
-      borderColor: color.faded(0.5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: color.faded(0.14), borderRadius: BorderRadius.circular(12)),
-                child: Icon(Icons.local_fire_department_rounded, color: color),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('9Kings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-              ),
-              if (active) StatusPill(label: 'AÇIK', color: AppColors.good),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Tek dokunuşla oyunu açar. Görüntü ayrıntısı düşürülür (hafif bulanıklık), kare hızı '
-            'sınırlanır, ekran kısılır, bildirimler susar; telefon ısınırsa koruma kendiliğinden '
-            'sıkılaşır. Oyun kapanınca her şey eski haline döner.',
-            style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
-          ),
-          const SizedBox(height: 14),
-          const _Label('Görüntü ayrıntısı'),
-          const SizedBox(height: 8),
-          _Choices<DetailLevel>(
-            values: DetailLevel.values,
-            selected: profile.detail,
-            label: (v) => v.label,
-            onSelected: busy ? null : (v) => game.updateNineKings(profile.copyWith(detail: v)),
-          ),
-          const SizedBox(height: 6),
-          Text(profile.detail.hint, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
-          const SizedBox(height: 14),
-          const _Label('Kare hızı'),
-          const SizedBox(height: 8),
-          _Choices<int>(
-            values: const [30, 60],
-            selected: profile.fps,
-            label: (v) => v == 30 ? 'Serin · 30 FPS' : 'Akıcı · 60 FPS',
-            onSelected: busy ? null : (v) => game.updateNineKings(profile.copyWith(fps: v)),
-          ),
-          _SwitchRow(
-            title: 'Güçlü yöntem',
-            subtitle: 'Bulanıklık hiç etki etmiyorsa açın: telefonun tamamı oyun boyunca düşük '
-                'çözünürlüğe geçer (yazılar da bulanık görünür).',
-            value: profile.wholeScreen,
-            onChanged: busy ? null : (v) => game.updateNineKings(profile.copyWith(wholeScreen: v)),
-          ),
-          if (suggestion != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.warn.faded(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Öneri', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Text(suggestion.reason, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
-                  const SizedBox(height: 8),
-                  SoftButton(
-                    label: 'Uygula: ${suggestion.level.label}',
-                    icon: Icons.auto_fix_high_rounded,
-                    onPressed: busy ? null : game.applyNineKingsSuggestion,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          PrimaryButton(
-            label: active ? '9Kings\'i Yeniden Başlat' : '9Kings\'i Başlat',
-            icon: Icons.sports_esports_rounded,
-            busy: busy,
-            onPressed: busy ? null : onStart,
-          ),
-          if (active) ...[
-            const SizedBox(height: 10),
-            SoftButton(
-              label: 'Geri Al',
-              icon: Icons.undo_rounded,
-              color: AppColors.warn,
-              onPressed: busy ? null : onStop,
-            ),
-          ],
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              title: const Text('Oyun içi ipuçları', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-              children: [
-                for (final tip in kNineKingsTips)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text('• $tip', style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PresetCard extends StatelessWidget {
-  const _PresetCard({required this.game, required this.busy});
-
-  final GameModeController game;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    final cfg = game.config;
-    GamePreset? matched;
-    for (final p in kGamePresets) {
-      if (p.matches(cfg)) matched = p;
-    }
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in kGamePresets)
-                ChoiceChip(
-                  label: Text(p.title),
-                  selected: identical(p, matched),
-                  onSelected: busy ? null : (_) => game.updateConfig(p.applyTo(cfg)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            matched?.subtitle ?? 'Özel ayar (aşağıdaki seçimlerinize göre).',
-            style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
-          ),
         ],
       ),
     );
@@ -853,9 +1106,12 @@ class _HonestyCard extends StatelessWidget {
         children: [
           item('Bir oyunun kare hızı dışarıdan YÜKSELTİLEMEZ; burada oyunun GPU yükü azaltılır ve '
               'kare hızına üst sınır konur. 90 FPS, ancak oyunun işlemcisi o hızı üretebiliyorsa görülür.'),
-          item('Savaşlarda 10^30 gibi dev sayılar ve çok sayıda birim varsa yavaşlamanın büyük kısmı '
-              'işlemciden gelir. Bu durumda çözünürlük düşürmek ısınmayı ve pili belirgin azaltır, '
+          item('Çok sayıda birim, büyük hesaplar ya da yoğun fizik içeren oyunlarda yavaşlamanın büyük '
+              'kısmı işlemciden gelir. Bu durumda çözünürlük düşürmek ısınmayı ve pili belirgin azaltır, '
               'akıcılığı ise sınırlı artırır.'),
+          item('Ana sayfadaki sıcaklık PİL sıcaklığıdır. Oyun bittikten sonra da bir süre yüksek kalır; '
+              'şarj olurken oynamak, kılıf ve sıcak ortam üstüne ekler. \"Buz\" modu ve 38 °C ısı koruması '
+              'ısıyı en çok düşüren seçimdir; yine de oyun işlemci kaynaklıysa sıcaklık tamamen önlenemez.'),
           item('Ekran Hz\'si ve çözünürlük ayarları üreticiye (HyperOS) göre farklı davranabilir. '
               'Uygulanamayan adımlar sonuç listesinde açıkça işaretlenir; başarı uydurulmaz.'),
           item('FPS değeri, oyunun kare zamanlarından (SurfaceFlinger) cihazda ölçülür; okunamazsa '

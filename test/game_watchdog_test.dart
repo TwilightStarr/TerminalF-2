@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:terminal_flutter/utils/game_mode.dart';
 import 'package:terminal_flutter/utils/game_watchdog.dart';
 
-GameSession _session({String package = kNineKingsPackage}) => GameSession(
+GameSession _session({String package = kDefaultGamePackage}) => GameSession(
       package: package,
       settings: const {
         'system:peak_refresh_rate': '120.0',
@@ -18,7 +18,7 @@ void main() {
     test('işaret, paket ve dosya yolları yerleşir; yer tutucu kalmaz', () {
       final script = buildWatchdogScript(_session());
       expect(script, contains(kWatchdogTag));
-      expect(script, contains('PKG=$kNineKingsPackage'));
+      expect(script, contains('PKG=$kDefaultGamePackage'));
       expect(script, contains('PIDF=$kWatchdogPid'));
       expect(script, contains('MARK=$kWatchdogMark'));
       expect(script.contains('@'), isFalse, reason: 'doldurulmamış yer tutucu var');
@@ -110,7 +110,7 @@ void main() {
   group('ısı koruması', () {
     test('sınırlama yapılan oturumda betiğe ısı koruması komutları girer', () {
       const s = GameSession(
-        package: kNineKingsPackage,
+        package: kDefaultGamePackage,
         settings: {'system:screen_brightness': '1000'},
         touchedGameManager: true,
         cpuMax: {'policy7': '3400000'},
@@ -123,5 +123,12 @@ void main() {
       expect(script.contains('@'), isFalse);
       expect(script.contains("'"), isFalse);
     });
+  });
+
+  test('pil sıcaklığı eşiği betiğe tenths olarak girer; 0 = kapalı', () {
+    final s = _session();
+    expect(buildWatchdogScript(s, guardTempC: 40), contains('[ 400 -gt 0 ]'));
+    expect(buildWatchdogScript(s), contains('[ 0 -gt 0 ]'));
+    expect(buildWatchdogScript(s, guardTempC: 40), contains('dumpsys battery'));
   });
 }

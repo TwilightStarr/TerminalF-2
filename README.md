@@ -66,7 +66,7 @@ lib/
   core/theme.dart           # TEK renk/tema kaynağı
   models/                   # Tweak, Profil
   utils/game_mode.dart      # oyun modu komutları ve ayrıştırıcıları (saf, testli)
-  utils/nine_kings.dart     # 9Kings'e özel mod: ayrıntı kademeleri, profil, akıllı öneri (saf, testli)
+  utils/game_suggest.dart   # son oturum ölçümüne göre çözünürlük/FPS önerisi (saf, testli)
   utils/game_probe.dart     # FPS/ısı/CPU ölçüm ayrıştırıcıları ve teşhis (saf, testli)
   utils/game_watchdog.dart  # cihazdaki izleyici betiği: otomatik geri alma + ölçüm günlüğü
   utils/alert_rules.dart    # uyarı eşikleri (saf, testli)

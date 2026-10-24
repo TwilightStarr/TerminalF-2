@@ -78,7 +78,18 @@ do
     fi
     : "${N:=-}" "${FIRST:=-}" "${LAST:=-}" "${TS:=-}" "${CUR:=-}" "${MAX:=-}"
     echo $(date +%s) $N $FIRST $LAST $TS $CUR $MAX >> $LOG
+    BT=$(dumpsys battery 2>/dev/null | grep -m1 temperature)
+    BT=${BT##*: }
+    HOTNOW=0
     if [ "$TS" != "-" ] && [ "$TS" -ge 2 ] 2>/dev/null
+    then
+      HOTNOW=1
+    fi
+    if [ @TEMPLIM@ -gt 0 ] && [ -n "$BT" ] && [ "$BT" -ge @TEMPLIM@ ] 2>/dev/null
+    then
+      HOTNOW=1
+    fi
+    if [ $HOTNOW -eq 1 ]
     then
       HOT=$((HOT+1))
     else
@@ -123,11 +134,14 @@ rm -f $PIDF
 ///   tetiklemez).
 /// - [giveUpSeconds]: oyun hiç ön plana gelmezse izleyici GERİ ALMADAN çıkar
 ///   (ön plan algılanamıyorsa mod oyun sırasında kendiliğinden kapanmasın).
+/// - [guardTempC]: pil sıcaklığı bu değere (°C) ulaşınca ısı koruması da
+///   devreye girer; 0 = yalnızca ısıl duruma bakılır.
 String buildWatchdogScript(
   GameSession session, {
   int pollSeconds = 10,
   int missLimit = 4,
   int giveUpSeconds = 150,
+  int guardTempC = 0,
 }) {
   if (!isSafePackage(session.package)) return '';
   final revert = StringBuffer();
@@ -140,7 +154,7 @@ String buildWatchdogScript(
       revert.writeln('( ${step.command} ) >/dev/null 2>&1 || OK=0');
     }
   }
-  // Isı koruması: ısıl durum art arda iki örnekte ≥ 2 ise bir kez uygulanır.
+  // Isı koruması: ısıl durum ≥ 2 ya da pil sıcaklığı eşikte art arda iki örnekte ise bir kez uygulanır.
   final guard = StringBuffer();
   for (final cmd in buildGuardCommands(session)) {
     guard.writeln('      ( $cmd ) >/dev/null 2>&1');
@@ -152,6 +166,7 @@ String buildWatchdogScript(
       .replaceAll('@PIDF@', kWatchdogPid)
       .replaceAll('@LOG@', kWatchdogLog)
       .replaceAll('@MARK@', kWatchdogMark)
+      .replaceAll('@TEMPLIM@', '${guardTempC.clamp(0, 70).toInt() * 10}')
       .replaceAll('@POLL@', '$pollSeconds')
       .replaceAll('@MISS@', '$missLimit')
       .replaceAll('@GIVEUP@', '$giveUpSeconds')

@@ -647,6 +647,29 @@ class AppTheme {
         color: AppColors.primary,
         linearTrackColor: AppColors.outline,
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surfaceHigh,
+        selectedColor: AppColors.primary.faded(0.18),
+        disabledColor: AppColors.surfaceHigh,
+        side: BorderSide(color: AppColors.outline),
+        showCheckmark: false,
+        labelStyle: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: AppColors.muted,
+        textColor: AppColors.text,
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+      ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.surfaceHigh,

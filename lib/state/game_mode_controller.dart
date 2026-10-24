@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -7,7 +8,7 @@ import '../services/settings_service.dart';
 import '../utils/game_mode.dart';
 import '../utils/game_probe.dart';
 import '../utils/game_watchdog.dart';
-import '../utils/nine_kings.dart';
+import '../utils/game_suggest.dart';
 import 'control_controller.dart';
 
 /// Tek bir adımın sonucu.
@@ -52,6 +53,13 @@ class GameRunResult {
   }
 }
 
+/// Oyun Modu'na eklenmiş bir oyun (her oyunun kendi ayarı vardır).
+class SavedGame {
+  const SavedGame(this.package, this.name);
+  final String package;
+  final String name;
+}
+
 /// "Oyun Modu": ağır oyunlar için GPU yükünü azaltır, ekranı
 /// sabit hıza kilitler, kare üst sınırı koyar ve OYUN BİTİNCE her şeyi
 /// ESKİ HALİNE döndürür.
@@ -70,7 +78,7 @@ class GameModeController extends ChangeNotifier {
 
   static const String _configKey = 'game_config';
   static const String _sessionKey = 'game_session';
-  static const String _nineKingsKey = 'nine_kings_profile';
+  static const String _profilesKey = 'game_profiles';
   static const String _lastRunKey = 'game_last_run';
 
   final ControlController control;
@@ -78,9 +86,11 @@ class GameModeController extends ChangeNotifier {
   final Future<void> Function(String package) _launcher;
   final Future<void> Function(Duration) _delay;
 
-  GameModeConfig _config = const GameModeConfig();
-  NineKingsProfile _nineKings = const NineKingsProfile();
-  String _lastKind = 'generic';
+  /// Paket adı -> o oyunun ayarı. Sıra, ekleme sırasıdır.
+  final Map<String, GameModeConfig> _profiles = {};
+  final Map<String, String> _names = {};
+  String? _selected;
+  String? _lastPackage;
   int? _lastTargetFps;
   GameSession? _session;
   bool _busy = false;
@@ -93,20 +103,32 @@ class GameModeController extends ChangeNotifier {
   String? _foreground;
   String? _syncNote;
 
-  GameModeConfig get config => _config;
+  /// Seçili oyunun ayarı. Hiç oyun seçilmediyse varsayılan yapılandırma.
+  GameModeConfig get config {
+    final s = _selected;
+    return (s == null ? null : _profiles[s]) ?? const GameModeConfig();
+  }
 
-  /// 9Kings modunun seçimleri.
-  NineKingsProfile get nineKings => _nineKings;
+  /// Eklenmiş oyunlar (ekleme sırasıyla).
+  List<SavedGame> get games => [
+        for (final e in _profiles.entries) SavedGame(e.key, _names[e.key] ?? e.key),
+      ];
 
-  /// Şu an açık olan oturumu 9Kings modu mu başlattı?
-  bool get nineKingsActive => _session?.kind == 'nineKings';
+  /// Oyun Modu için bir oyun seçili mi?
+  bool get hasGame => _selected != null && _profiles.containsKey(_selected);
 
-  /// Son oyun oturumunu 9Kings modu mu başlattı? (rapor/öneri için)
-  bool get lastRunWasNineKings => _lastKind == 'nineKings';
+  String? get selectedPackage => _selected;
 
-  /// Son oturum ölçümüne göre bir sonraki 9Kings ayrıntı önerisi.
-  DetailSuggestion? get nineKingsSuggestion =>
-      lastRunWasNineKings ? suggestDetail(_stats, _nineKings) : null;
+  /// Seçili oyunun görünen adı.
+  String get selectedName => _names[_selected] ?? _selected ?? '';
+
+  /// Açık oturum seçili oyuna mı ait?
+  bool get activeForSelected => _session != null && _session!.package == config.package;
+
+  /// Son oturum ölçümüne göre bir sonraki oturum için ayar önerisi (yalnızca
+  /// son oturum seçili oyunun oturumuysa).
+  ScaleSuggestion? get suggestion =>
+      _lastPackage == config.package ? suggestSettings(_stats, config) : null;
 
   /// Oyun modu şu an açık mı (geri alınacak bir şey var mı)?
   bool get active => _session != null;
@@ -130,7 +152,7 @@ class GameModeController extends ChangeNotifier {
   /// Son oturumun olası darboğaz teşhisi.
   Diagnosis? get diagnosis {
     final s = _stats;
-    return s == null ? null : diagnose(s, _lastTargetFps ?? _config.targetFps);
+    return s == null ? null : diagnose(s, _lastTargetFps ?? config.targetFps);
   }
 
   /// `dumpsys window` ile okunabilen ön plan paketi; `null` = okunamadı
@@ -153,12 +175,21 @@ class GameModeController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      _config = GameModeConfig.decode(await _store.readString(_configKey, fallback: ''));
       _session = GameSession.decode(await _store.readString(_sessionKey, fallback: ''));
-      _nineKings = NineKingsProfile.decode(await _store.readString(_nineKingsKey, fallback: ''));
+      _loadProfiles(await _store.readString(_profilesKey, fallback: ''));
+      if (_profiles.isEmpty) {
+        // Eski sürümde tek bir oyun ayarı vardı; varsa onu ilk oyun yap.
+        final legacy = await _store.readString(_configKey, fallback: '');
+        if (legacy.isNotEmpty) {
+          final cfg = GameModeConfig.decode(legacy);
+          _profiles[cfg.package] = cfg;
+          _names[cfg.package] = cfg.package;
+          _selected = cfg.package;
+        }
+      }
       final last = (await _store.readString(_lastRunKey, fallback: '')).split(':');
       if (last.length == 2) {
-        _lastKind = last[0] == 'nineKings' ? 'nineKings' : 'generic';
+        _lastPackage = isSafePackage(last[0]) ? last[0] : null;
         _lastTargetFps = int.tryParse(last[1]);
       }
     } catch (_) {
@@ -167,35 +198,123 @@ class GameModeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _loadProfiles(String raw) {
+    if (raw.isEmpty) return;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      for (final item in (json['games'] as List? ?? const [])) {
+        final m = item as Map<String, dynamic>;
+        final cfg = GameModeConfig.fromJson((m['config'] as Map).cast<String, dynamic>());
+        _profiles[cfg.package] = cfg;
+        _names[cfg.package] = (m['name'] as String?)?.trim().isNotEmpty == true
+            ? m['name'] as String
+            : cfg.package;
+      }
+      final sel = json['selected'] as String?;
+      _selected = (sel != null && _profiles.containsKey(sel))
+          ? sel
+          : (_profiles.isEmpty ? null : _profiles.keys.first);
+    } catch (_) {
+      _profiles.clear();
+      _names.clear();
+      _selected = null;
+    }
+  }
+
+  Future<void> _persistProfiles() async {
+    final json = {
+      'selected': _selected,
+      'games': [
+        for (final e in _profiles.entries)
+          {'name': _names[e.key] ?? e.key, 'config': e.value.toJson()},
+      ],
+    };
+    try {
+      await _store.writeString(_profilesKey, jsonEncode(json));
+    } catch (_) {}
+  }
+
+  /// Seçili oyunun ayarını günceller. Hiç oyun yoksa, ayardaki paketle bir oyun
+  /// oluşturur.
   Future<void> updateConfig(GameModeConfig next) async {
-    final packageChanged = next.package != _config.package;
-    _config = next;
-    if (packageChanged) _installed = null;
+    if (!isSafePackage(next.package)) return;
+    final sel = _selected;
+    if (sel == null || !_profiles.containsKey(sel)) {
+      _profiles[next.package] = next;
+      _names.putIfAbsent(next.package, () => next.package);
+      _selected = next.package;
+      _installed = null;
+    } else if (sel == next.package) {
+      _profiles[sel] = next;
+    } else {
+      _installed = null;
+      // Paket adı değiştiyse kaydı yeni pakete taşı (sıra korunur).
+      final entries = _profiles.entries.toList();
+      _profiles.clear();
+      for (final e in entries) {
+        if (e.key == sel) {
+          _profiles[next.package] = next;
+        } else {
+          _profiles[e.key] = e.value;
+        }
+      }
+      _names[next.package] = _names.remove(sel) ?? next.package;
+      _selected = next.package;
+    }
     notifyListeners();
-    try {
-      await _store.writeString(_configKey, next.encode());
-    } catch (_) {}
+    await _persistProfiles();
   }
 
-  Future<void> updateNineKings(NineKingsProfile next) async {
-    _nineKings = next;
+  /// Hazır ayarı seçili oyuna uygular.
+  Future<void> applyPreset(GamePreset preset) => updateConfig(preset.applyTo(config));
+
+  /// Oyun ekler (varsa yalnızca seçer). Yeni oyun, "Serin" hazır ayarıyla başlar.
+  Future<bool> addGame(String package, String name) async {
+    if (!isSafePackage(package)) return false;
+    if (!_profiles.containsKey(package)) {
+      final cool = kGamePresets.firstWhere((p) => p.id == 'cool');
+      _profiles[package] = cool.applyTo(GameModeConfig(package: package));
+      _names[package] = name.trim().isEmpty ? package : name.trim();
+    }
+    _selected = package;
+    _installed = null;
     notifyListeners();
-    try {
-      await _store.writeString(_nineKingsKey, next.encode());
-    } catch (_) {}
+    await _persistProfiles();
+    checkInstalled();
+    return true;
   }
 
-  /// Önerilen ayrıntı kademesini 9Kings profiline uygular.
-  Future<void> applyNineKingsSuggestion() async {
-    final sug = nineKingsSuggestion;
+  Future<void> selectGame(String package) async {
+    if (!_profiles.containsKey(package) || _selected == package) return;
+    _selected = package;
+    _installed = null;
+    notifyListeners();
+    await _persistProfiles();
+    checkInstalled();
+  }
+
+  /// Oyunu listeden çıkarır (ayarları silinir; açık oturum varsa dokunulmaz).
+  Future<void> removeGame(String package) async {
+    if (!_profiles.containsKey(package)) return;
+    _profiles.remove(package);
+    _names.remove(package);
+    if (_selected == package) {
+      _selected = _profiles.isEmpty ? null : _profiles.keys.first;
+    }
+    _installed = null;
+    notifyListeners();
+    await _persistProfiles();
+  }
+
+  /// Önerilen çözünürlüğü (ve varsa kare hızını) seçili oyuna uygular.
+  Future<void> applySuggestion() async {
+    final sug = suggestion;
     if (sug == null) return;
-    await updateNineKings(_nineKings.copyWith(detail: sug.level));
+    await updateConfig(config.copyWith(scale: sug.scale, targetFps: sug.fps));
   }
 
-  /// Tek tuş: 9Kings profilini uygular ve oyunu açar.
-  Future<GameRunResult> startNineKings({bool launch = true}) {
-    return start(launch: launch, overrideConfig: _nineKings.toConfig(), kind: 'nineKings');
-  }
+  /// Tek dokunuş: seçili oyunun ayarlarını uygular ve oyunu açar.
+  Future<GameRunResult> startSelected({bool launch = true}) => start(launch: launch);
 
   Future<String> _read(String command) async {
     try {
@@ -208,8 +327,8 @@ class GameModeController extends ChangeNotifier {
 
   /// Oyun bu cihazda kurulu mu? (`pm path`)
   Future<void> checkInstalled() async {
-    if (!control.ready || !isSafePackage(_config.package)) return;
-    final out = await _read('pm path ${_config.package}');
+    if (!control.ready || !isSafePackage(config.package)) return;
+    final out = await _read('pm path ${config.package}');
     _installed = out.contains('package:');
     notifyListeners();
   }
@@ -282,13 +401,12 @@ class GameModeController extends ChangeNotifier {
   Future<GameRunResult> start({
     bool launch = true,
     GameModeConfig? overrideConfig,
-    String kind = 'generic',
   }) async {
     if (!control.ready) {
       return const GameRunResult([], note: 'Önce tam kontrolü etkinleştirin.');
     }
     if (_busy) return const GameRunResult([], note: 'Başka bir işlem sürüyor.');
-    final cfg = overrideConfig ?? _config;
+    final cfg = overrideConfig ?? config;
     if (!isSafePackage(cfg.package)) {
       return const GameRunResult([], note: 'Geçersiz paket adı.');
     }
@@ -309,13 +427,13 @@ class GameModeController extends ChangeNotifier {
       }
 
       // 1) Eski değerleri oku ve DİSKE yaz (değişiklikten önce).
-      final snap = await _snapshot(cfg, kind);
+      final snap = await _snapshot(cfg);
       _session = snap.session;
       await _persistSession(_session);
-      _lastKind = kind;
+      _lastPackage = cfg.package;
       _lastTargetFps = cfg.targetFps;
       try {
-        await _store.writeString(_lastRunKey, '$kind:${cfg.targetFps}');
+        await _store.writeString(_lastRunKey, '${cfg.package}:${cfg.targetFps}');
       } catch (_) {}
 
       // 2) Uygula.
@@ -362,7 +480,7 @@ class GameModeController extends ChangeNotifier {
         ));
       }
       if (cfg.autoRevert) {
-        results.add(await _startWatchdog(snap.session));
+        results.add(await _startWatchdog(snap.session, cfg));
       }
       _lastResult = GameRunResult([...results, ...extra]);
 
@@ -382,9 +500,9 @@ class GameModeController extends ChangeNotifier {
 
   /// İzleyiciyi başlatır ve gerçekten çalıştığını doğrular; çalışmıyorsa
   /// adım BAŞARISIZ görünür (başarı uydurulmaz).
-  Future<GameStepResult> _startWatchdog(GameSession session) async {
+  Future<GameStepResult> _startWatchdog(GameSession session, GameModeConfig cfg) async {
     const label = 'Oyun kapanınca otomatik geri al';
-    final script = buildWatchdogScript(session);
+    final script = buildWatchdogScript(session, guardTempC: cfg.guardTempC);
     if (script.isEmpty) {
       return const GameStepResult(
         label: label,
@@ -457,13 +575,13 @@ class GameModeController extends ChangeNotifier {
         List<CpuPolicy> cpuPolicies,
       })> _snapshot(
     GameModeConfig cfg,
-    String kind,
   ) async {
     final settings = <String, String?>{};
     final keys = <SettingKey>[
       ...kRefreshKeys,
       if (cfg.animationsOff) ...kAnimationKeys,
       if (cfg.dnd) kZenKey,
+      if (cfg.batterySaver) kLowPowerKey,
       if (cfg.dimScreen) ...kBrightnessKeys,
     ];
     for (final key in keys) {
@@ -510,7 +628,6 @@ class GameModeController extends ChangeNotifier {
         densityOverride: densityOverride,
         changedScreen: changedScreen,
         cpuMax: cpuMax,
-        kind: kind,
         startedAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
       physicalSize: physical,

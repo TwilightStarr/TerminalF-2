@@ -62,7 +62,7 @@ void main() {
       final cmds = steps.map((s) => s.command).toList();
       expect(cmds, contains('am kill-all'));
       expect(cmds.any((c) => c.startsWith('cmd game set --mode performance --fps 90 --downscale 0.6 ')), isTrue);
-      expect(cmds.any((c) => c == 'cmd game mode performance $kNineKingsPackage'), isTrue);
+      expect(cmds.any((c) => c == 'cmd game mode performance $kDefaultGamePackage'), isTrue);
       expect(cmds.any((c) => c.contains('min_refresh_rate 90.0')), isTrue);
       expect(cmds.any((c) => c.startsWith('wm size')), isFalse);
     });
@@ -107,7 +107,7 @@ void main() {
 
   group('geri alma', () {
     GameSession session({bool screen = false}) => GameSession(
-          package: kNineKingsPackage,
+          package: kDefaultGamePackage,
           settings: const {
             'system:peak_refresh_rate': '120.0',
             'system:min_refresh_rate': null,
@@ -159,7 +159,7 @@ void main() {
 
     test('tehlikeli eski değer komuta girmez', () {
       const s = GameSession(
-        package: kNineKingsPackage,
+        package: kDefaultGamePackage,
         settings: {'system:peak_refresh_rate': '1; reboot'},
         touchedGameManager: false,
         startedAtMs: 0,
@@ -222,7 +222,7 @@ void main() {
 
     test('geri alma: animasyon ve DND eski değerlerine döner', () {
       const s = GameSession(
-        package: kNineKingsPackage,
+        package: kDefaultGamePackage,
         settings: {
           'global:window_animation_scale': '1.0',
           'global:transition_animation_scale': null,
@@ -288,7 +288,7 @@ void main() {
 
     test('geri alma: parlaklık ve işlemci özgün değerlere döner', () {
       const s = GameSession(
-        package: kNineKingsPackage,
+        package: kDefaultGamePackage,
         settings: {'system:screen_brightness': '1000', 'system:screen_brightness_mode': '1'},
         touchedGameManager: false,
         cpuMax: {'policy7': '3400000', 'policy4': '2850000'},
@@ -304,7 +304,7 @@ void main() {
 
     test('bozuk cpuMax kaydı komuta girmez', () {
       final s = GameSession.fromJson({
-        'package': kNineKingsPackage,
+        'package': kDefaultGamePackage,
         'settings': <String, dynamic>{},
         'cpuMax': {'policy7; reboot': '3400000', 'policy4': '1; reboot'},
       });
@@ -313,7 +313,7 @@ void main() {
 
     test('ısı koruması: işlemci %55, parlaklık özgün değerin %35\'i', () {
       const s = GameSession(
-        package: kNineKingsPackage,
+        package: kDefaultGamePackage,
         settings: {'system:screen_brightness': '1000'},
         touchedGameManager: false,
         cpuMax: {'policy7': '3400000'},
@@ -325,8 +325,68 @@ void main() {
     });
 
     test('sınırlama yapılmadıysa ısı koruması komut üretmez', () {
-      const s = GameSession(package: kNineKingsPackage, settings: {}, touchedGameManager: false, startedAtMs: 0);
+      const s = GameSession(package: kDefaultGamePackage, settings: {}, touchedGameManager: false, startedAtMs: 0);
       expect(buildGuardCommands(s), isEmpty);
+    });
+  });
+
+  group('güç profili, pil tasarrufu ve ısı eşiği', () {
+    test('serin güç profili komutlara yansır', () {
+      final steps = buildApplySteps(const GameModeConfig(powerProfile: GamePower.battery));
+      final cmds = steps.map((s) => s.command).toList();
+      expect(cmds.any((c) => c.startsWith('cmd game set --mode battery ')), isTrue);
+      expect(cmds.any((c) => c == 'cmd game mode battery $kDefaultGamePackage'), isTrue);
+    });
+
+    test('pil tasarrufu yalnızca açıkken yazılır ve geri alınır', () {
+      expect(
+        buildApplySteps(const GameModeConfig()).any((s) => s.command.contains('low_power')),
+        isFalse,
+      );
+      final steps = buildApplySteps(const GameModeConfig(batterySaver: true));
+      expect(steps.any((s) => s.command == 'settings put global low_power 1' && s.optional), isTrue);
+
+      const session = GameSession(
+        package: kDefaultGamePackage,
+        settings: {'global:low_power': '0'},
+        touchedGameManager: false,
+        startedAtMs: 0,
+      );
+      expect(
+        buildRevertSteps(session).any((s) => s.command == 'settings put global low_power 0'),
+        isTrue,
+      );
+    });
+
+    test('ısı koruması, pil tasarrufu kaydedildiyse onu da açar', () {
+      const session = GameSession(
+        package: kDefaultGamePackage,
+        settings: {'global:low_power': null},
+        touchedGameManager: false,
+        startedAtMs: 0,
+      );
+      expect(buildGuardCommands(session), contains('settings put global low_power 1'));
+    });
+
+    test('yeni alanlar kaydedilir ve geçersiz eşik 40 olur', () {
+      const c = GameModeConfig(powerProfile: GamePower.battery, batterySaver: true, guardTempC: 38);
+      final back = GameModeConfig.decode(c.encode());
+      expect(back.powerProfile, GamePower.battery);
+      expect(back.batterySaver, isTrue);
+      expect(back.guardTempC, 38);
+      expect(GameModeConfig.fromJson({'guardTempC': 77}).guardTempC, 40);
+    });
+
+    test('hazır ayarlar: en serin olanın güç profili serin, eşiği düşük', () {
+      final ice = kGamePresets.firstWhere((p) => p.id == 'ice');
+      final cfg = ice.applyTo(const GameModeConfig());
+      expect(cfg.powerProfile, GamePower.battery);
+      expect(cfg.batterySaver, isTrue);
+      expect(cfg.guardTempC, 38);
+      expect(cfg.scale, 0.4);
+      expect(ice.matches(cfg), isTrue);
+      final ids = kGamePresets.map((p) => p.id).toSet();
+      expect(ids.length, kGamePresets.length);
     });
   });
 }

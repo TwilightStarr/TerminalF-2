@@ -1,3 +1,19 @@
+# Oyun sekmesi yenilendi: 9Kings modu kalktı, her oyunda tek dokunuş
+
+- **9Kings modu kaldırıldı.** Yerine her oyun için çalışan tek bir Oyun sekmesi geldi: oyunu ekleyin (yüklü uygulamalardan seçilir), her oyunun ayarı ayrı saklanır, **Başlat** tek dokunuşla ayarları uygular ve oyunu açar. Eski tek-oyun ayarınız ilk oyun olarak taşınır.
+- **Hazır modlar (ayrıntılı açıklamalı):** Buz (en serin), Serin, Dengeli, Akıcı. Altında gruplanmış ayrıntılı ayarlar: Performans, Ekran, Sistem, Isı ve güvenlik; her grubun özeti kapalıyken görünür.
+- **Daha serin çalışma:**
+  - Yeni **güç profili** (Serin/Standart/Performans). Eskiden her mod "performans" profilini kullanıyordu; birçok cihazda bu işlemci/GPU'yu yükseltip ısıtır. Serin ve Buz artık pil profilini kullanır.
+  - Yeni **Pil Tasarrufu'nu aç** seçeneği (eski değer geri yazılır).
+  - Yeni **%40 çözünürlük** kademesi.
+  - **Isı koruması artık pil sıcaklığına da bakar** (38/40/42/44 °C eşiği seçilebilir): eşiğe art arda iki ölçümde ulaşılırsa parlaklık daha çok kısılır, Pil Tasarrufu açılır, root varsa işlemci daha çok sınırlanır.
+- **Akıllı öneri** artık her oyun için çalışır: ısındıysa bir kademe düşük çözünürlük (en düşükteyse 30 FPS), ısınmadıysa bir kademe net görüntü önerir.
+- **Ana sayfa:** Anlık Durum kartlarının altında kalan boş alan düzeltildi (kartlar içeriğine göre yükselir).
+- **Tema:** Chip, alt sayfa, liste ve metin düğmeleri artık seçili temanın renklerini kullanır (daha önce Material varsayılanına düşüyordu).
+- Doğrulama notu: Flutter SDK bu ortamda yok; Dart kodu `flutter analyze/test` ile ÇALIŞTIRILAMADI. İlk CI çıktısına bakın.
+
+---
+
 # Genel Oyun Modu geri geldi + ayrı 9Kings modu
 
 - **Genel Oyun Modu** eski haline döndü (paket adı düzenleme, kare hızı, çözünürlük, anahtarlar, hazır ayarlar Serin/Akıcı). Gelişmiş bölümü artık kapalı değil.
