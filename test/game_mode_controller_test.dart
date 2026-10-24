@@ -7,6 +7,7 @@ import 'package:terminal_flutter/services/shizuku_service.dart';
 import 'package:terminal_flutter/state/control_controller.dart';
 import 'package:terminal_flutter/state/game_mode_controller.dart';
 import 'package:terminal_flutter/utils/game_mode.dart';
+import 'package:terminal_flutter/utils/nine_kings.dart';
 import 'package:terminal_flutter/utils/shell_utils.dart';
 
 class _FakeRoot extends RootService {
@@ -308,6 +309,118 @@ void main() {
           : _device(c);
       await t.game.detectForeground();
       expect(t.game.foregroundPackage, 'com.example.terminal_flutter');
+    });
+  });
+
+  group('parlaklık ve işlemci sınırı (controller)', () {
+    String Function(String) device() => (c) {
+          if (c == 'settings get system screen_brightness') return '1000';
+          if (c == 'settings get system screen_brightness_mode') return '1';
+          if (c == kCpuPolicyReadCommand) {
+            return 'policy0 2000000 2000000\npolicy4 2850000 2850000\npolicy7 3400000 3400000';
+          }
+          return _device(c);
+        };
+
+    test('root ile: özgün değerler okunur, sınır uygulanır, geri alınca döner', () async {
+      final t = await _setup();
+      await t.game.updateConfig(const GameModeConfig(dimScreen: true, cpuCap: true));
+      t.root.responder = device();
+      await t.game.start(launch: false);
+
+      final saved = GameSession.decode(t.store.data['game_session']!)!;
+      expect(saved.settings['system:screen_brightness'], '1000');
+      expect(saved.cpuMax['policy7'], '3400000');
+      expect(saved.cpuMax.containsKey('policy0'), isFalse);
+      expect(t.root.commands.any((c) => c.contains('screen_brightness 600')), isTrue);
+      expect(t.root.commands.any((c) => c.contains('echo 2380000 > ')), isTrue);
+
+      t.root.commands.clear();
+      final r = await t.game.stop();
+      expect(r.ok, isTrue);
+      final all = t.root.commands.join('\n');
+      expect(all, contains('settings put system screen_brightness 1000'));
+      expect(all, contains('settings put system screen_brightness_mode 1'));
+      expect(all, contains('echo 3400000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq'));
+    });
+
+    test('parlaklık okunamazsa adım dürüstçe başarısız görünür', () async {
+      final t = await _setup();
+      await t.game.updateConfig(const GameModeConfig(dimScreen: true));
+      final r = await t.game.start(launch: false);
+      expect(r.steps.any((s) => s.label == 'Ekran parlaklığını kıs' && !s.ok), isTrue);
+      expect(r.ok, isTrue);
+    });
+  });
+
+  group('9Kings modu (controller)', () {
+    test('tek tuş: sabit paket, profil çözünürlüğü, oturum türü nineKings', () async {
+      final t = await _setup();
+      await t.game.updateConfig(const GameModeConfig(package: 'a.b'));
+      final r = await t.game.startNineKings();
+      expect(r.ok, isTrue);
+      expect(t.launched, [kNineKingsPackage]);
+      expect(t.game.nineKingsActive, isTrue);
+      expect(
+        t.root.commands.any((c) =>
+            c.startsWith('cmd game set') &&
+            c.contains('--fps 30') &&
+            c.contains('--downscale 0.5') &&
+            c.endsWith(kNineKingsPackage)),
+        isTrue,
+      );
+      expect(t.game.config.package, 'a.b', reason: 'genel ayar bozulmamalı');
+      final saved = GameSession.decode(t.store.data['game_session']!)!;
+      expect(saved.kind, 'nineKings');
+    });
+
+    test('genel mod oturumu nineKings sayılmaz; geri alınca kapanır', () async {
+      final t = await _setup();
+      await t.game.start(launch: false);
+      expect(t.game.active, isTrue);
+      expect(t.game.nineKingsActive, isFalse);
+      await t.game.stop();
+      await t.game.startNineKings(launch: false);
+      expect(t.game.nineKingsActive, isTrue);
+      await t.game.stop();
+      expect(t.game.nineKingsActive, isFalse);
+    });
+
+    test('profil kaydedilir ve yeniden açılınca yüklenir', () async {
+      final t = await _setup();
+      await t.game.updateNineKings(
+        const NineKingsProfile(detail: DetailLevel.strong, fps: 60),
+      );
+      final again = GameModeController(control: t.control, store: t.store, delay: (_) async {});
+      await again.load();
+      expect(again.nineKings.detail, DetailLevel.strong);
+      expect(again.nineKings.fps, 60);
+    });
+
+    test('önce 9Kings çalıştırıp ısındıysa daha bulanık önerilir ve uygulanır', () async {
+      final t = await _setup();
+      await t.game.startNineKings(launch: false);
+      t.root.responder = (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log')
+          ? '1700000000 20 1000000000000 1001900000000 3 3200000 3400000\n'
+              '1700000010 20 1000000000000 1001900000000 3 3200000 3400000\n'
+              '1700000020 20 1000000000000 1001900000000 3 3200000 3400000'
+          : _device(c);
+      await t.game.refreshStats();
+      expect(t.game.nineKingsSuggestion!.level, DetailLevel.strong);
+      await t.game.applyNineKingsSuggestion();
+      expect(t.game.nineKings.detail, DetailLevel.strong);
+    });
+
+    test('genel mod çalıştırıldıysa 9Kings önerisi çıkmaz', () async {
+      final t = await _setup();
+      await t.game.start(launch: false);
+      t.root.responder = (c) => c.startsWith('cat /data/local/tmp/terminalf_game.log')
+          ? '1700000000 20 1000000000000 1001900000000 3 3200000 3400000\n'
+              '1700000010 20 1000000000000 1001900000000 3 3200000 3400000\n'
+              '1700000020 20 1000000000000 1001900000000 3 3200000 3400000'
+          : _device(c);
+      await t.game.refreshStats();
+      expect(t.game.nineKingsSuggestion, isNull);
     });
   });
 }

@@ -125,6 +125,16 @@ void main() {
       expect(s.avgCpuRatio, closeTo(0.912, 0.001));
     });
 
+    test('GUARD satırı ısı korumasının devreye girdiğini işaretler', () {
+      const log = '1700000000 20 1000000000000 1001900000000 2 3000000 3400000\n'
+          'GUARD 1700000010\n'
+          '1700000020 20 1000000000000 1001900000000 2 3000000 3400000';
+      final s = parseWatchLog(log)!;
+      expect(s.guardTriggered, isTrue);
+      expect(s.samples, 2);
+      expect(parseWatchLog('1700000000 - - - - - -')!.guardTriggered, isFalse);
+    });
+
     test('boş günlük null', () {
       expect(parseWatchLog(''), isNull);
       expect(parseWatchLog('çöp'), isNull);

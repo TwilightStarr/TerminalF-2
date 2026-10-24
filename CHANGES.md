@@ -1,3 +1,37 @@
+# Genel Oyun Modu geri geldi + ayrı 9Kings modu
+
+- **Genel Oyun Modu** eski haline döndü (paket adı düzenleme, kare hızı, çözünürlük, anahtarlar, hazır ayarlar Serin/Akıcı). Gelişmiş bölümü artık kapalı değil.
+- **9Kings** (sayfanın en üstünde, ayrı kart): tek tuşla oyunu açar ve yalnızca 9Kings'e özeldir (paket sabit).
+  - **Görüntü ayrıntısı:** Hafif / Orta / Çok bulanık (%70 / %50 / %40 çözünürlük). Piksel sanatta bulanıklık az fark edilir, ısı belirgin düşer.
+  - **Kare hızı:** Serin 30 ya da Akıcı 60 FPS.
+  - **Güçlü yöntem:** oyun-başına küçültme işe yaramazsa tüm ekranı geçici küçültür.
+  - Hep açık: ekran 60 Hz kilidi, parlaklık kısma, animasyon/bildirim kısma, arka plan temizliği, işlemci sınırı (root), ısı koruması, otomatik geri alma.
+  - **Akıllı öneri:** son 9Kings oturumunda ısındıysanız (ya da ısı koruması devreye girdiyse) bir kademe daha bulanık; ısınmadıysanız ve hedef FPS tutulduysa bir kademe daha net önerir. Tek dokunuşla uygulanır.
+  - **Oyun içi ipuçları:** hızlandırma/auto düğmeleri, mola, şarj, kılıf.
+- İki mod aynı anda açık olamaz; birini başlatmak önce diğerinin değişikliklerini geri alır. Oturum hangi modun başlattığını kaydeder.
+- Yeni testler: `test/nine_kings_test.dart` ve `game_mode_controller_test.dart` içinde 9Kings grubu. Dart kodu bu ortamda derlenemedi.
+
+---
+
+# 9Kings Modu (ana mod) ve ısı önlemleri
+
+- Oyun sekmesinin tepesinde tek **9Kings Modu** kartı: 30 FPS, %50 çözünürlük, ekran 60 Hz, parlaklık kısık, animasyonlar kapalı, bildirimler sessiz, ısı koruması. Diğer her şey "Gelişmiş ayarlar" altında.
+- **Ekran parlaklığını kıs:** oyun boyunca mevcut parlaklığın %60'ı (özgün değer + otomatik parlaklık modu kaydedilir, geri alınır).
+- **İşlemci hızını sınırla (yalnızca root):** en güçlü iki küme `scaling_max_freq` %70; özgün değerler kaydedilir ve geri yazılır. Shizuku ile yapılamaz; yapılamadığı sonuç listesinde dürüstçe yazar.
+- **Isı koruması:** izleyici, ısıl durum art arda iki örnekte "Orta" ya da üstüyse bir kez daha sıkılaştırır (işlemci %55, parlaklık özgün değerin %35'i). Rapor "Isı koruması devreye girdi" der.
+- 30 FPS hedefinde ekran artık 60 Hz'e kilitlenir (önceden kilitlenmiyordu).
+- Yeni testler: parlaklık, işlemci sınırı, geri alma, bozuk kayıt reddi, ısı koruması, izleyici betiği. Betik yerel `sh` ile ısı koruması dahil sahte komutlarla çalıştırıldı; Dart kodu derlenemedi.
+
+---
+
+# Oyun Modu sadeleştirme
+
+- Sayfada tek karar: **Serin (önerilen)** ya da **Akıcı**. Diğer tüm ayarlar "Gelişmiş ayarlar" altında kapalı durur.
+- Paket adı düzenleme kaldırıldı; arayüzdeki oyun adı geçen metinler silindi.
+- İlk açılışta Serin modu otomatik seçilir. "En yüksek akıcılık" ön ayarı kaldırıldı (gelişmiş ayarlardan 90 FPS yine seçilebilir).
+
+---
+
 # Oyun Modu 2 — ölçüm, teşhis ve otomatik geri alma
 
 - **Cihazda izleyici:** Oyun Modu açılınca telefonda küçük bir betik başlar (Terminal kapansa da çalışır). Oyun ön plandayken 10 sn'de bir **gerçek FPS** (SurfaceFlinger kare zamanları), **ısıl durum** ve **büyük çekirdek hızını** kaydeder; oyun ~40 sn ön planda olmazsa tüm ayarları **kendiliğinden geri alır**. Geri alma başarılıysa/başarısızsa işaret dosyasına yazar; Terminal açılınca okunur (başarısızsa oturum saklanır, "Geri Al" kalır).

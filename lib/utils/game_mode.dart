@@ -11,7 +11,7 @@ import 'dart:convert';
 
 import 'shell_utils.dart';
 
-/// 9Kings (Playdigious) paket adı.
+/// Oyunun paket adı.
 const String kNineKingsPackage = 'com.playdigious.ninekings';
 
 final RegExp _pkgPattern = RegExp(r'^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$');
@@ -145,6 +145,8 @@ class GameModeConfig {
     this.autoRevert = true,
     this.animationsOff = false,
     this.dnd = false,
+    this.dimScreen = false,
+    this.cpuCap = false,
   });
 
   final String package;
@@ -170,10 +172,18 @@ class GameModeConfig {
   /// Oyun boyunca bildirimleri sustur (Rahatsız Etme: yalnızca öncelikliler).
   final bool dnd;
 
+  /// Oyun boyunca ekran parlaklığını mevcut değerin %60'ına indirir
+  /// (AMOLED'de ısı ve pilin en büyük kalemlerinden biri).
+  final bool dimScreen;
+
+  /// En güçlü iki işlemci kümesinin azami hızını %70'e sınırlar (YALNIZCA
+  /// root ile; hız dalgalanması ve ısıl kısıtlama azalır).
+  final bool cpuCap;
+
   bool get reducesResolution => scale < 0.999;
 
-  /// Ekran kilidi Hz değeri; 30 hedefinde kilitlenmez.
-  int? get lockHz => (lockRefreshRate && targetFps >= 60) ? targetFps : null;
+  /// Ekran kilidi Hz değeri; 30 FPS hedefinde 60 Hz'e (30'un katı) kilitlenir.
+  int? get lockHz => lockRefreshRate ? (targetFps >= 60 ? targetFps : 60) : null;
 
   GameModeConfig copyWith({
     String? package,
@@ -185,6 +195,8 @@ class GameModeConfig {
     bool? autoRevert,
     bool? animationsOff,
     bool? dnd,
+    bool? dimScreen,
+    bool? cpuCap,
   }) {
     return GameModeConfig(
       package: package ?? this.package,
@@ -196,6 +208,8 @@ class GameModeConfig {
       autoRevert: autoRevert ?? this.autoRevert,
       animationsOff: animationsOff ?? this.animationsOff,
       dnd: dnd ?? this.dnd,
+      dimScreen: dimScreen ?? this.dimScreen,
+      cpuCap: cpuCap ?? this.cpuCap,
     );
   }
 
@@ -209,6 +223,8 @@ class GameModeConfig {
         'autoRevert': autoRevert,
         'animationsOff': animationsOff,
         'dnd': dnd,
+        'dimScreen': dimScreen,
+        'cpuCap': cpuCap,
       };
 
   factory GameModeConfig.fromJson(Map<String, dynamic> json) {
@@ -228,6 +244,8 @@ class GameModeConfig {
       autoRevert: json['autoRevert'] as bool? ?? true,
       animationsOff: json['animationsOff'] as bool? ?? false,
       dnd: json['dnd'] as bool? ?? false,
+      dimScreen: json['dimScreen'] as bool? ?? false,
+      cpuCap: json['cpuCap'] as bool? ?? false,
     );
   }
 
@@ -253,6 +271,8 @@ class GamePreset {
     required this.scale,
     required this.animationsOff,
     required this.dnd,
+    this.dimScreen = false,
+    this.cpuCap = false,
   });
 
   final String id;
@@ -262,15 +282,19 @@ class GamePreset {
   final double scale;
   final bool animationsOff;
   final bool dnd;
+  final bool dimScreen;
+  final bool cpuCap;
 
   /// Paket, yöntem ve arka plan seçimini koruyup yalnızca ön ayarın
   /// değerlerini uygular.
   GameModeConfig applyTo(GameModeConfig base) => base.copyWith(
         targetFps: targetFps,
         scale: scale,
-        lockRefreshRate: targetFps >= 60,
+        lockRefreshRate: true,
         animationsOff: animationsOff,
         dnd: dnd,
+        dimScreen: dimScreen,
+        cpuCap: cpuCap,
       );
 
   /// [config] bu ön ayarla birebir aynı mı?
@@ -278,36 +302,32 @@ class GamePreset {
       config.targetFps == targetFps &&
       (config.scale - scale).abs() < 0.001 &&
       config.animationsOff == animationsOff &&
-      config.dnd == dnd;
+      config.dnd == dnd &&
+      config.dimScreen == dimScreen &&
+      config.cpuCap == cpuCap;
 }
 
-/// 9Kings gibi CPU'yu yoğun kullanan oyunlar için üç hazır ayar.
+/// Genel Oyun Modu için iki hazır ayar.
 const List<GamePreset> kGamePresets = [
   GamePreset(
     id: 'cool',
-    title: 'Serin ve uzun pil',
-    subtitle: '30 FPS · %50 çözünürlük · animasyonlar kapalı · bildirimler sessiz',
+    title: 'Serin',
+    subtitle: '30 FPS · %50 çözünürlük · ekran 60 Hz · parlaklık kısık · animasyonlar kapalı · '
+        'bildirimler sessiz. Root varsa işlemci hızı da sınırlanır.',
     targetFps: 30,
     scale: 0.5,
     animationsOff: true,
     dnd: true,
+    dimScreen: true,
+    cpuCap: true,
   ),
   GamePreset(
     id: 'balanced',
-    title: 'Dengeli',
-    subtitle: '60 FPS · %60 çözünürlük · animasyonlar kapalı',
+    title: 'Daha akıcı',
+    subtitle: '60 FPS · %60 çözünürlük · animasyonlar kapalı. Daha akıcı, daha çok ısınır.',
     targetFps: 60,
     scale: 0.6,
     animationsOff: true,
-    dnd: false,
-  ),
-  GamePreset(
-    id: 'max',
-    title: 'En yüksek akıcılık',
-    subtitle: '90 FPS · %75 çözünürlük',
-    targetFps: 90,
-    scale: 0.75,
-    animationsOff: false,
     dnd: false,
   ),
 ];
@@ -321,6 +341,66 @@ const List<SettingKey> kAnimationKeys = [
 
 /// Rahatsız Etme modu (0 = kapalı, 1 = yalnızca öncelikli).
 const SettingKey kZenKey = SettingKey('global', 'zen_mode');
+
+/// Ekran parlaklığı (önce değer, sonra mod geri yazılır).
+const List<SettingKey> kBrightnessKeys = [
+  SettingKey('system', 'screen_brightness'),
+  SettingKey('system', 'screen_brightness_mode'),
+];
+
+/// Parlaklık düşürme oranı (mevcut değerin yüzdesi) ve ısı korumasındaki oran.
+const double kDimFraction = 0.6;
+const double kGuardDimFraction = 0.35;
+
+/// İşlemci hız sınırı oranları (normal / ısı koruması).
+const double kCpuCapFraction = 0.7;
+const double kGuardCpuFraction = 0.55;
+
+final RegExp _policyName = RegExp(r'^policy\d{1,2}$');
+final RegExp _digits = RegExp(r'^\d{4,8}$');
+
+/// Bir işlemci frekans kümesi (`policyN`): şimdiki azami ve donanım azami (kHz).
+class CpuPolicy {
+  const CpuPolicy(this.name, this.curMax, this.hwMax);
+  final String name;
+  final int curMax;
+  final int hwMax;
+}
+
+/// Okuma komutu: her küme için `policyN şimdikiAzami donanımAzami`.
+const String kCpuPolicyReadCommand =
+    r'for p in /sys/devices/system/cpu/cpufreq/policy*; do '
+    r'echo "$(basename $p) $(cat $p/scaling_max_freq) $(cat $p/cpuinfo_max_freq)"; done';
+
+List<CpuPolicy> parseCpuPolicies(String output) {
+  final result = <CpuPolicy>[];
+  for (final line in outputLines(output)) {
+    final p = line.split(RegExp(r'\s+'));
+    if (p.length != 3 || !_policyName.hasMatch(p[0])) continue;
+    final cur = int.tryParse(p[1]);
+    final hw = int.tryParse(p[2]);
+    if (cur == null || hw == null || cur <= 0 || hw <= 0) continue;
+    result.add(CpuPolicy(p[0], cur, hw));
+  }
+  return result;
+}
+
+/// Donanım hızı en yüksek [count] küme (oyunu yükleyen büyük çekirdekler).
+List<CpuPolicy> topPolicies(List<CpuPolicy> all, {int count = 2}) {
+  final sorted = [...all]..sort((a, b) => b.hwMax.compareTo(a.hwMax));
+  return sorted.take(count).toList();
+}
+
+String _cpuWrite(String name, int khz) =>
+    'echo $khz > /sys/devices/system/cpu/cpufreq/$name/scaling_max_freq';
+
+/// Kümelerin azami hızını [fraction] oranına çeker.
+String cpuCapCommand(List<CpuPolicy> policies, double fraction) {
+  return [
+    for (final p in policies)
+      if (_policyName.hasMatch(p.name)) _cpuWrite(p.name, (p.hwMax * fraction).round()),
+  ].join('; ');
+}
 
 /// Çalıştırılacak tek bir adım.
 class GameStep {
@@ -367,6 +447,8 @@ class GameSession {
     this.sizeOverride,
     this.densityOverride,
     this.changedScreen = false,
+    this.cpuMax = const {},
+    this.kind = 'generic',
     required this.startedAtMs,
   });
 
@@ -382,6 +464,13 @@ class GameSession {
 
   /// Bu oturum `wm size/density` değiştirdi mi?
   final bool changedScreen;
+
+  /// `policyN` -> önceki `scaling_max_freq` (kHz); yalnızca işlemci sınırı
+  /// uygulandıysa dolu.
+  final Map<String, String> cpuMax;
+
+  /// Oturumu hangi mod başlattı: `generic` (Genel Oyun Modu) ya da `nineKings`.
+  final String kind;
   final int startedAtMs;
 
   Map<String, dynamic> toJson() => {
@@ -391,6 +480,8 @@ class GameSession {
         'sizeOverride': sizeOverride,
         'densityOverride': densityOverride,
         'changedScreen': changedScreen,
+        'cpuMax': cpuMax,
+        'kind': kind,
         'startedAtMs': startedAtMs,
       };
 
@@ -403,6 +494,12 @@ class GameSession {
       sizeOverride: json['sizeOverride'] as String?,
       densityOverride: json['densityOverride'] as String?,
       changedScreen: json['changedScreen'] as bool? ?? false,
+      cpuMax: {
+        for (final e in ((json['cpuMax'] as Map?) ?? const {}).entries)
+          if (_policyName.hasMatch('${e.key}') && _digits.hasMatch('${e.value}'))
+            '${e.key}': '${e.value}',
+      },
+      kind: json['kind'] == 'nineKings' ? 'nineKings' : 'generic',
       startedAtMs: (json['startedAtMs'] as num?)?.toInt() ?? 0,
     );
   }
@@ -434,6 +531,8 @@ List<GameStep> buildApplySteps(
   GameModeConfig config, {
   PixelSize? physicalSize,
   int? physicalDensity,
+  int? brightness,
+  List<CpuPolicy>? cpuPolicies,
 }) {
   final pkg = config.package;
   if (!isSafePackage(pkg)) return const [];
@@ -472,6 +571,20 @@ List<GameStep> buildApplySteps(
       [for (final k in kAnimationKeys) 'settings put ${k.namespace} ${k.key} 0'].join('; '),
       optional: true,
     ));
+  }
+  if (config.dimScreen && brightness != null && brightness > 1) {
+    final dimmed = (brightness * kDimFraction).round().clamp(1, brightness);
+    steps.add(GameStep(
+      'Ekran parlaklığını kıs',
+      'settings put system screen_brightness_mode 0; settings put system screen_brightness $dimmed',
+      optional: true,
+    ));
+  }
+  if (config.cpuCap && cpuPolicies != null && cpuPolicies.isNotEmpty) {
+    final cmd = cpuCapCommand(topPolicies(cpuPolicies), kCpuCapFraction);
+    if (cmd.isNotEmpty) {
+      steps.add(GameStep('İşlemci hızını sınırla (%70)', cmd, optional: true));
+    }
   }
   if (config.dnd) {
     steps.add(GameStep(
@@ -535,6 +648,18 @@ List<GameStep> buildRevertSteps(GameSession session) {
   if (anim.isNotEmpty) {
     steps.add(GameStep('Animasyon ayarlarını geri al', anim.join('; ')));
   }
+  final bright = _restoreCommands(session, kBrightnessKeys);
+  if (bright.isNotEmpty) {
+    steps.add(GameStep('Ekran parlaklığını geri al', bright.join('; ')));
+  }
+  final cpu = <String>[
+    for (final e in session.cpuMax.entries)
+      if (_policyName.hasMatch(e.key) && _digits.hasMatch(e.value))
+        _cpuWrite(e.key, int.parse(e.value)),
+  ];
+  if (cpu.isNotEmpty) {
+    steps.add(GameStep('İşlemci sınırını geri al', cpu.join('; '), optional: true));
+  }
   final zen = _restoreCommands(session, const [kZenKey]);
   if (zen.isNotEmpty) {
     steps.add(GameStep('Rahatsız Etme ayarını geri al', zen.join('; ')));
@@ -548,4 +673,27 @@ List<GameStep> buildRevertSteps(GameSession session) {
     ));
   }
   return steps;
+}
+
+/// Isı koruması: oyun sırasında ısıl durum yükselirse izleyicinin uyguladığı
+/// ek önlemler (işlemci sınırı %55'e, parlaklık özgün değerin %35'ine).
+/// Geri alma, özgün değerleri zaten yazdığı için ayrıca geri alınması gerekmez.
+List<String> buildGuardCommands(GameSession session) {
+  final cmds = <String>[];
+  if (session.cpuMax.isNotEmpty) {
+    final policies = <CpuPolicy>[
+      for (final e in session.cpuMax.entries)
+        if (_policyName.hasMatch(e.key) && _digits.hasMatch(e.value))
+          CpuPolicy(e.key, int.parse(e.value), int.parse(e.value)),
+    ];
+    final cmd = cpuCapCommand(policies, kGuardCpuFraction);
+    if (cmd.isNotEmpty) cmds.add(cmd);
+  }
+  const key = 'system:screen_brightness';
+  final orig = int.tryParse(session.settings[key] ?? '');
+  if (session.settings.containsKey(key) && orig != null && orig > 1) {
+    final v = (orig * kGuardDimFraction).round().clamp(1, orig);
+    cmds.add('settings put system screen_brightness_mode 0; settings put system screen_brightness $v');
+  }
+  return cmds;
 }

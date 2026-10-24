@@ -67,8 +67,13 @@ void main() {
       expect(cmds.any((c) => c.startsWith('wm size')), isFalse);
     });
 
-    test('30 FPS hedefinde ekran kilitlenmez', () {
+    test('30 FPS hedefinde ekran 60 Hz\'e kilitlenir (30\'un katı)', () {
       final steps = buildApplySteps(const GameModeConfig(targetFps: 30));
+      expect(steps.any((s) => s.command.contains('min_refresh_rate 60.0')), isTrue);
+    });
+
+    test('kilit kapalıysa yenileme ayarına dokunulmaz', () {
+      final steps = buildApplySteps(const GameModeConfig(targetFps: 30, lockRefreshRate: false));
       expect(steps.any((s) => s.command.contains('refresh_rate')), isFalse);
     });
 
@@ -194,7 +199,9 @@ void main() {
       expect(cool.scale, 0.5);
       expect(cool.animationsOff, isTrue);
       expect(cool.dnd, isTrue);
-      expect(cool.lockRefreshRate, isFalse);
+      expect(cool.lockRefreshRate, isTrue);
+      expect(cool.dimScreen, isTrue);
+      expect(cool.cpuCap, isTrue);
     });
 
     test('matches yalnızca birebir aynı değerlerde doğru', () {
@@ -242,6 +249,84 @@ void main() {
       final old = GameModeConfig.decode('{"package":"a.b","targetFps":60,"scale":0.5}');
       expect(old.autoRevert, isTrue);
       expect(old.animationsOff, isFalse);
+    });
+  });
+
+  group('parlaklık ve işlemci sınırı', () {
+    const policies = [
+      CpuPolicy('policy0', 2000000, 2000000),
+      CpuPolicy('policy4', 2850000, 2850000),
+      CpuPolicy('policy7', 3400000, 3400000),
+    ];
+
+    test('çıktı çözümü: geçersiz satırlar atlanır', () {
+      final p = parseCpuPolicies('policy0 2000000 2000000\nçöp\npolicy7 3400000 3400000\npolicyX 1 2\npolicy4 0 5');
+      expect(p.map((e) => e.name), ['policy0', 'policy7']);
+    });
+
+    test('en yüksek iki küme seçilir', () {
+      expect(topPolicies(policies).map((e) => e.name), ['policy7', 'policy4']);
+    });
+
+    test('parlaklık mevcut değerin %60\'ına iner, mod elle yapılır', () {
+      final steps = buildApplySteps(const GameModeConfig(dimScreen: true), brightness: 1000);
+      final s = steps.firstWhere((x) => x.command.contains('screen_brightness '));
+      expect(s.command, 'settings put system screen_brightness_mode 0; settings put system screen_brightness 600');
+    });
+
+    test('parlaklık okunamadıysa adım üretilmez', () {
+      expect(buildApplySteps(const GameModeConfig(dimScreen: true)).any((x) => x.command.contains('brightness')), isFalse);
+    });
+
+    test('işlemci sınırı %70, yalnızca en yüksek iki küme', () {
+      final steps = buildApplySteps(const GameModeConfig(cpuCap: true), cpuPolicies: policies);
+      final cmd = steps.firstWhere((x) => x.command.contains('scaling_max_freq')).command;
+      expect(cmd, contains('echo 2380000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq'));
+      expect(cmd, contains('echo 1995000 > /sys/devices/system/cpu/cpufreq/policy4/scaling_max_freq'));
+      expect(cmd, isNot(contains('policy0')));
+    });
+
+    test('geri alma: parlaklık ve işlemci özgün değerlere döner', () {
+      const s = GameSession(
+        package: kNineKingsPackage,
+        settings: {'system:screen_brightness': '1000', 'system:screen_brightness_mode': '1'},
+        touchedGameManager: false,
+        cpuMax: {'policy7': '3400000', 'policy4': '2850000'},
+        startedAtMs: 0,
+      );
+      final steps = buildRevertSteps(s);
+      final b = steps.firstWhere((x) => x.command.contains('screen_brightness ')).command;
+      expect(b, 'settings put system screen_brightness 1000; settings put system screen_brightness_mode 1');
+      final c = steps.firstWhere((x) => x.command.contains('scaling_max_freq')).command;
+      expect(c, contains('echo 3400000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq'));
+      expect(c, contains('echo 2850000 > /sys/devices/system/cpu/cpufreq/policy4/scaling_max_freq'));
+    });
+
+    test('bozuk cpuMax kaydı komuta girmez', () {
+      final s = GameSession.fromJson({
+        'package': kNineKingsPackage,
+        'settings': <String, dynamic>{},
+        'cpuMax': {'policy7; reboot': '3400000', 'policy4': '1; reboot'},
+      });
+      expect(s.cpuMax, isEmpty);
+    });
+
+    test('ısı koruması: işlemci %55, parlaklık özgün değerin %35\'i', () {
+      const s = GameSession(
+        package: kNineKingsPackage,
+        settings: {'system:screen_brightness': '1000'},
+        touchedGameManager: false,
+        cpuMax: {'policy7': '3400000'},
+        startedAtMs: 0,
+      );
+      final cmds = buildGuardCommands(s).join('\n');
+      expect(cmds, contains('echo 1870000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq'));
+      expect(cmds, contains('settings put system screen_brightness 350'));
+    });
+
+    test('sınırlama yapılmadıysa ısı koruması komut üretmez', () {
+      const s = GameSession(package: kNineKingsPackage, settings: {}, touchedGameManager: false, startedAtMs: 0);
+      expect(buildGuardCommands(s), isEmpty);
     });
   });
 }

@@ -151,7 +151,11 @@ class SessionStats {
     this.minFps,
     this.maxThermal,
     this.avgCpuRatio,
+    this.guardTriggered = false,
   });
+
+  /// Isı koruması oyun sırasında devreye girdi mi?
+  final bool guardTriggered;
 
   final int samples;
   final int durationSec;
@@ -167,7 +171,12 @@ class SessionStats {
 /// Günlük metninden oturum özeti çıkarır; geçerli örnek yoksa `null`.
 SessionStats? parseWatchLog(String raw) {
   final samples = <WatchSample>[];
+  var guard = false;
   for (final line in outputLines(raw)) {
+    if (line.startsWith('GUARD')) {
+      guard = true;
+      continue;
+    }
     final s = parseWatchLine(line);
     if (s != null) samples.add(s);
   }
@@ -199,6 +208,7 @@ SessionStats? parseWatchLog(String raw) {
     minFps: minFps,
     maxThermal: maxThermal,
     avgCpuRatio: avgRatio,
+    guardTriggered: guard,
   );
 }
 

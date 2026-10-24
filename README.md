@@ -22,7 +22,7 @@
 | **Ana Sayfa** | Cihaz sağlığı puanı (0-100), "şimdi ne yapmalıyım?" önerileri, **gerçek** RAM / depolama / pil / sıcaklık durumu, tek dokunuşla *Akıllı Optimizasyon*, Hızlandır, Önbellek Temizle |
 | **Optimize** | 4 hazır profil (Performans, Pil Tasarrufu, Gizlilik, Temizlik) + tüm ayarlar tek tek. Her ayarın AÇIK/KAPALI durumu cihazdan okunur |
 | **Uygulamalar** | Ara, dokun, yönet: Aç · Durdur · Önbellek temizle · Dondur · Kaldır. Dondurulmuş uygulamalar tek yerden geri açılır |
-| **Oyun** | **Oyun Modu** (varsayılan: 9Kings): kare hızı üst sınırı (30/60/90), oyun çözünürlüğünü düşürme, ekranı 60/90 Hz'e kilitleme, arka planı temizleme, animasyon/bildirim kısma, 3 hazır ayar. Cihazdaki izleyici oyun kapanınca **her şeyi kendiliğinden eski haline** döndürür; oyun sırasında **gerçek FPS, ısıl durum ve işlemci hızını** kaydedip olası darboğazı söyler |
+| **Oyun** | **Oyun Modu**: kare hızı üst sınırı (30/60/90), oyun çözünürlüğünü düşürme, ekranı 60/90 Hz'e kilitleme, arka planı temizleme, animasyon/bildirim kısma, 2 hazır mod (Serin / Akıcı). Cihazdaki izleyici oyun kapanınca **her şeyi kendiliğinden eski haline** döndürür; oyun sırasında **gerçek FPS, ısıl durum ve işlemci hızını** kaydedip olası darboğazı söyler |
 | **Cihaz** | Model, sistem, ekran, IP, parlaklık, ekranı açık tut, izinler, **bildirim ve uyarı ayarları**, sistem kısayolları, önerilen açık kaynak uygulamalar |
 
 ## Bildirimler ve kolaylıklar
@@ -66,6 +66,7 @@ lib/
   core/theme.dart           # TEK renk/tema kaynağı
   models/                   # Tweak, Profil
   utils/game_mode.dart      # oyun modu komutları ve ayrıştırıcıları (saf, testli)
+  utils/nine_kings.dart     # 9Kings'e özel mod: ayrıntı kademeleri, profil, akıllı öneri (saf, testli)
   utils/game_probe.dart     # FPS/ısı/CPU ölçüm ayrıştırıcıları ve teşhis (saf, testli)
   utils/game_watchdog.dart  # cihazdaki izleyici betiği: otomatik geri alma + ölçüm günlüğü
   utils/alert_rules.dart    # uyarı eşikleri (saf, testli)

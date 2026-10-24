@@ -7,6 +7,7 @@ import '../services/settings_service.dart';
 import '../utils/game_mode.dart';
 import '../utils/game_probe.dart';
 import '../utils/game_watchdog.dart';
+import '../utils/nine_kings.dart';
 import 'control_controller.dart';
 
 /// Tek bir adımın sonucu.
@@ -51,7 +52,7 @@ class GameRunResult {
   }
 }
 
-/// "Oyun Modu": 9Kings gibi ağır oyunlar için GPU yükünü azaltır, ekranı
+/// "Oyun Modu": ağır oyunlar için GPU yükünü azaltır, ekranı
 /// sabit hıza kilitler, kare üst sınırı koyar ve OYUN BİTİNCE her şeyi
 /// ESKİ HALİNE döndürür.
 ///
@@ -69,6 +70,8 @@ class GameModeController extends ChangeNotifier {
 
   static const String _configKey = 'game_config';
   static const String _sessionKey = 'game_session';
+  static const String _nineKingsKey = 'nine_kings_profile';
+  static const String _lastRunKey = 'game_last_run';
 
   final ControlController control;
   final SettingsService _store;
@@ -76,6 +79,9 @@ class GameModeController extends ChangeNotifier {
   final Future<void> Function(Duration) _delay;
 
   GameModeConfig _config = const GameModeConfig();
+  NineKingsProfile _nineKings = const NineKingsProfile();
+  String _lastKind = 'generic';
+  int? _lastTargetFps;
   GameSession? _session;
   bool _busy = false;
   bool _disposed = false;
@@ -88,6 +94,19 @@ class GameModeController extends ChangeNotifier {
   String? _syncNote;
 
   GameModeConfig get config => _config;
+
+  /// 9Kings modunun seçimleri.
+  NineKingsProfile get nineKings => _nineKings;
+
+  /// Şu an açık olan oturumu 9Kings modu mu başlattı?
+  bool get nineKingsActive => _session?.kind == 'nineKings';
+
+  /// Son oyun oturumunu 9Kings modu mu başlattı? (rapor/öneri için)
+  bool get lastRunWasNineKings => _lastKind == 'nineKings';
+
+  /// Son oturum ölçümüne göre bir sonraki 9Kings ayrıntı önerisi.
+  DetailSuggestion? get nineKingsSuggestion =>
+      lastRunWasNineKings ? suggestDetail(_stats, _nineKings) : null;
 
   /// Oyun modu şu an açık mı (geri alınacak bir şey var mı)?
   bool get active => _session != null;
@@ -111,7 +130,7 @@ class GameModeController extends ChangeNotifier {
   /// Son oturumun olası darboğaz teşhisi.
   Diagnosis? get diagnosis {
     final s = _stats;
-    return s == null ? null : diagnose(s, _config.targetFps);
+    return s == null ? null : diagnose(s, _lastTargetFps ?? _config.targetFps);
   }
 
   /// `dumpsys window` ile okunabilen ön plan paketi; `null` = okunamadı
@@ -136,6 +155,12 @@ class GameModeController extends ChangeNotifier {
     try {
       _config = GameModeConfig.decode(await _store.readString(_configKey, fallback: ''));
       _session = GameSession.decode(await _store.readString(_sessionKey, fallback: ''));
+      _nineKings = NineKingsProfile.decode(await _store.readString(_nineKingsKey, fallback: ''));
+      final last = (await _store.readString(_lastRunKey, fallback: '')).split(':');
+      if (last.length == 2) {
+        _lastKind = last[0] == 'nineKings' ? 'nineKings' : 'generic';
+        _lastTargetFps = int.tryParse(last[1]);
+      }
     } catch (_) {
       // Okunamazsa varsayılanlarla devam.
     }
@@ -150,6 +175,26 @@ class GameModeController extends ChangeNotifier {
     try {
       await _store.writeString(_configKey, next.encode());
     } catch (_) {}
+  }
+
+  Future<void> updateNineKings(NineKingsProfile next) async {
+    _nineKings = next;
+    notifyListeners();
+    try {
+      await _store.writeString(_nineKingsKey, next.encode());
+    } catch (_) {}
+  }
+
+  /// Önerilen ayrıntı kademesini 9Kings profiline uygular.
+  Future<void> applyNineKingsSuggestion() async {
+    final sug = nineKingsSuggestion;
+    if (sug == null) return;
+    await updateNineKings(_nineKings.copyWith(detail: sug.level));
+  }
+
+  /// Tek tuş: 9Kings profilini uygular ve oyunu açar.
+  Future<GameRunResult> startNineKings({bool launch = true}) {
+    return start(launch: launch, overrideConfig: _nineKings.toConfig(), kind: 'nineKings');
   }
 
   Future<String> _read(String command) async {
@@ -234,12 +279,16 @@ class GameModeController extends ChangeNotifier {
 
   /// Oyun modunu açar; [launch] ise oyunu da başlatır. Önce (varsa) önceki
   /// oturumu geri alır, böylece eski değerler HER ZAMAN gerçek orijinaldir.
-  Future<GameRunResult> start({bool launch = true}) async {
+  Future<GameRunResult> start({
+    bool launch = true,
+    GameModeConfig? overrideConfig,
+    String kind = 'generic',
+  }) async {
     if (!control.ready) {
       return const GameRunResult([], note: 'Önce tam kontrolü etkinleştirin.');
     }
     if (_busy) return const GameRunResult([], note: 'Başka bir işlem sürüyor.');
-    final cfg = _config;
+    final cfg = overrideConfig ?? _config;
     if (!isSafePackage(cfg.package)) {
       return const GameRunResult([], note: 'Geçersiz paket adı.');
     }
@@ -260,15 +309,22 @@ class GameModeController extends ChangeNotifier {
       }
 
       // 1) Eski değerleri oku ve DİSKE yaz (değişiklikten önce).
-      final snap = await _snapshot(cfg);
+      final snap = await _snapshot(cfg, kind);
       _session = snap.session;
       await _persistSession(_session);
+      _lastKind = kind;
+      _lastTargetFps = cfg.targetFps;
+      try {
+        await _store.writeString(_lastRunKey, '$kind:${cfg.targetFps}');
+      } catch (_) {}
 
       // 2) Uygula.
       final steps = buildApplySteps(
         cfg,
         physicalSize: snap.physicalSize,
         physicalDensity: snap.physicalDensity,
+        brightness: snap.brightness,
+        cpuPolicies: snap.cpuPolicies,
       );
       final results = await _run(steps);
       final extra = <GameStepResult>[];
@@ -280,6 +336,29 @@ class GameModeController extends ChangeNotifier {
           ok: false,
           optional: false,
           detail: 'Ekran boyutu okunamadı, atlandı.',
+        ));
+      }
+      if (cfg.cpuCap && control.path != AccessPath.root) {
+        extra.add(const GameStepResult(
+          label: 'İşlemci hızını sınırla',
+          ok: false,
+          optional: true,
+          detail: 'Bu adım root gerektirir; Shizuku ile yapılamaz.',
+        ));
+      } else if (cfg.cpuCap && snap.cpuPolicies.isEmpty) {
+        extra.add(const GameStepResult(
+          label: 'İşlemci hızını sınırla',
+          ok: false,
+          optional: true,
+          detail: 'İşlemci frekans bilgisi okunamadı.',
+        ));
+      }
+      if (cfg.dimScreen && snap.brightness == null) {
+        extra.add(const GameStepResult(
+          label: 'Ekran parlaklığını kıs',
+          ok: false,
+          optional: true,
+          detail: 'Mevcut parlaklık okunamadı.',
         ));
       }
       if (cfg.autoRevert) {
@@ -369,17 +448,40 @@ class GameModeController extends ChangeNotifier {
     return result;
   }
 
-  Future<({GameSession session, PixelSize? physicalSize, int? physicalDensity})> _snapshot(
+  Future<
+      ({
+        GameSession session,
+        PixelSize? physicalSize,
+        int? physicalDensity,
+        int? brightness,
+        List<CpuPolicy> cpuPolicies,
+      })> _snapshot(
     GameModeConfig cfg,
+    String kind,
   ) async {
     final settings = <String, String?>{};
     final keys = <SettingKey>[
       ...kRefreshKeys,
       if (cfg.animationsOff) ...kAnimationKeys,
       if (cfg.dnd) kZenKey,
+      if (cfg.dimScreen) ...kBrightnessKeys,
     ];
     for (final key in keys) {
       settings[key.id] = normalizeSettingValue(await _read(key.readCommand));
+    }
+
+    int? brightness;
+    if (cfg.dimScreen) {
+      brightness = int.tryParse(settings['system:screen_brightness'] ?? '');
+    }
+
+    var cpuPolicies = <CpuPolicy>[];
+    final cpuMax = <String, String>{};
+    if (cfg.cpuCap && control.path == AccessPath.root) {
+      cpuPolicies = parseCpuPolicies(await _read(kCpuPolicyReadCommand));
+      for (final p in topPolicies(cpuPolicies)) {
+        cpuMax[p.name] = '${p.curMax}';
+      }
     }
 
     PixelSize? physical;
@@ -407,10 +509,14 @@ class GameModeController extends ChangeNotifier {
         sizeOverride: sizeOverride,
         densityOverride: densityOverride,
         changedScreen: changedScreen,
+        cpuMax: cpuMax,
+        kind: kind,
         startedAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
       physicalSize: physical,
       physicalDensity: density,
+      brightness: brightness,
+      cpuPolicies: cpuPolicies,
     );
   }
 }

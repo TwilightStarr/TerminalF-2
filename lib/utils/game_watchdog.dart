@@ -21,7 +21,7 @@ const String kWatchdogMark = '$kWatchdogDir/terminalf_reverted';
 const String kWatchdogTag = 'TERMINALF_WATCHDOG';
 
 /// Betik şablonu. Yer tutucular: `@PKG@ @PIDF@ @LOG@ @MARK@ @POLL@ @MISS@
-/// @GIVEUP@ @REVERT@`. `;` yerine satır sonu kullanılır.
+/// @GIVEUP@ @GUARD@ @REVERT@`. `;` yerine satır sonu kullanılır.
 const String _template = r'''
 # @TAG@
 PKG=@PKG@
@@ -34,6 +34,8 @@ rm -f $MARK
 SEEN=0
 MISS=0
 WAITED=0
+HOT=0
+GUARD=0
 while :
 do
   sleep @POLL@
@@ -76,6 +78,18 @@ do
     fi
     : "${N:=-}" "${FIRST:=-}" "${LAST:=-}" "${TS:=-}" "${CUR:=-}" "${MAX:=-}"
     echo $(date +%s) $N $FIRST $LAST $TS $CUR $MAX >> $LOG
+    if [ "$TS" != "-" ] && [ "$TS" -ge 2 ] 2>/dev/null
+    then
+      HOT=$((HOT+1))
+    else
+      HOT=0
+    fi
+    if [ $HOT -ge 2 ] && [ $GUARD -eq 0 ]
+    then
+      GUARD=1
+      echo GUARD $(date +%s) >> $LOG
+@GUARD@
+    fi
   else
     MISS=$((MISS+1))
   fi
@@ -126,7 +140,13 @@ String buildWatchdogScript(
       revert.writeln('( ${step.command} ) >/dev/null 2>&1 || OK=0');
     }
   }
+  // Isı koruması: ısıl durum art arda iki örnekte ≥ 2 ise bir kez uygulanır.
+  final guard = StringBuffer();
+  for (final cmd in buildGuardCommands(session)) {
+    guard.writeln('      ( $cmd ) >/dev/null 2>&1');
+  }
   return _template
+      .replaceAll('@GUARD@', guard.toString().trimRight())
       .replaceAll('@TAG@', kWatchdogTag)
       .replaceAll('@PKG@', session.package)
       .replaceAll('@PIDF@', kWatchdogPid)

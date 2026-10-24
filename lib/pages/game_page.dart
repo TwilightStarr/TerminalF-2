@@ -5,11 +5,12 @@ import '../state/control_controller.dart';
 import '../state/game_mode_controller.dart';
 import '../utils/game_mode.dart';
 import '../utils/game_probe.dart';
+import '../utils/nine_kings.dart';
 import '../widgets/control_setup_sheet.dart';
 import '../widgets/log_sheet.dart';
 import '../widgets/ui.dart';
 
-/// Oyun Modu sayfası: 9Kings gibi ağır oyunlarda GPU yükünü, ısınmayı ve pil
+/// Oyun Modu sayfası: ağır oyunlarda GPU yükünü, ısınmayı ve pil
 /// tüketimini azaltır; oyun bitince her şeyi eski haline getirir.
 class GamePage extends StatefulWidget {
   const GamePage({super.key, required this.control, required this.game});
@@ -95,6 +96,25 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     showToast(context, result.ok ? 'Her şey eski haline döndü' : result.summary);
   }
 
+  Future<void> _startNineKings() async {
+    if (!await _ensureReady()) return;
+    if (game.nineKings.wholeScreen) {
+      if (!mounted) return;
+      final ok = await confirmDialog(
+        context,
+        title: 'Tüm ekran çözünürlüğü düşürülecek',
+        message: 'Telefonun tamamı oyun boyunca düşük çözünürlükte çalışır (yazılar bulanık görünür). '
+            'Oyun kapanınca kendiliğinden eski haline döner; olmazsa Geri Al\'a basın.',
+        confirmLabel: 'Başlat',
+      );
+      if (!ok) return;
+    }
+    final result = await game.startNineKings();
+    control.reportDone('9Kings Modu', result.summary, ok: result.ok);
+    if (!mounted) return;
+    showToast(context, result.summary);
+  }
+
   Future<void> _editPackage() async {
     final controller = TextEditingController(text: game.config.package);
     final value = await showDialog<String>(
@@ -113,8 +133,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 8),
             Text(
-              'Varsayılan 9Kings. Başka bir oyun için paket adını yazın '
-              '(Uygulamalar sekmesinde görünür).',
+              'Genel Oyun Modu için oyunun paket adını yazın (Uygulamalar sekmesinde görünür).',
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ],
@@ -166,7 +185,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                 ],
               ),
               const SizedBox(height: 6),
-              _StatusCard(control: control, game: game, onEditPackage: _editPackage),
+              _NineKingsCard(
+                control: control,
+                game: game,
+                onStart: _startNineKings,
+                onStop: _stop,
+              ),
               if (busy) ...[
                 const SizedBox(height: 12),
                 const ClipRRect(
@@ -174,9 +198,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   child: LinearProgressIndicator(minHeight: 6),
                 ),
               ],
-              const SectionHeader('Hazır ayarlar'),
+              const SectionHeader('Genel Oyun Modu'),
+              _StatusCard(control: control, game: game, onEditPackage: _editPackage),
+              const SizedBox(height: 12),
+              ...[
               _PresetCard(game: game, busy: busy),
-              const SectionHeader('Hedef'),
+              const SizedBox(height: 12),
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,7 +228,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     const SizedBox(height: 6),
                     Text(
                       'Düşük çözünürlük GPU yükünü, ısınmayı ve pil tüketimini en çok azaltan ayardır. '
-                      '9Kings piksel sanat olduğu için görüntü kaybı azdır.',
+                      'Piksel sanat oyunlarda görüntü kaybı azdır.',
                       style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
                     ),
                     if (cfg.reducesResolution) ...[
@@ -233,15 +260,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                 child: Column(
                   children: [
                     _SwitchRow(
-                      title: 'Ekranı ${cfg.targetFps >= 60 ? '${cfg.targetFps} Hz' : 'sabit hıza'} kilitle',
-                      subtitle: cfg.targetFps >= 60
-                          ? 'Değişken yenileme hızının oyun sırasında düşmesini engeller. '
-                              'Pil tüketimini artırabilir; oyun bitince geri alınır.'
-                          : '30 FPS hedefinde ekran kilitlenmez.',
-                      value: cfg.lockRefreshRate && cfg.targetFps >= 60,
-                      onChanged: busy || cfg.targetFps < 60
-                          ? null
-                          : (v) => game.updateConfig(cfg.copyWith(lockRefreshRate: v)),
+                      title: 'Ekranı ${cfg.targetFps >= 60 ? cfg.targetFps : 60} Hz\'e kilitle',
+                      subtitle: 'Değişken yenileme hızının oyun sırasında yükselmesini engeller; '
+                          'ekran ve GPU daha az çalışır. Oyun bitince geri alınır.',
+                      value: cfg.lockRefreshRate,
+                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(lockRefreshRate: v)),
                     ),
                     const RowDivider(),
                     _SwitchRow(
@@ -274,12 +297,29 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                       value: cfg.dnd,
                       onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(dnd: v)),
                     ),
+                    const RowDivider(),
+                    _SwitchRow(
+                      title: 'Ekran parlaklığını kıs',
+                      subtitle: 'Oyun boyunca parlaklık mevcut değerin %60\'ına iner. AMOLED ekranda '
+                          'ısınmayı ve pili en çok etkileyen ayarlardan biridir.',
+                      value: cfg.dimScreen,
+                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(dimScreen: v)),
+                    ),
+                    const RowDivider(),
+                    _SwitchRow(
+                      title: 'İşlemci hızını sınırla (root)',
+                      subtitle: 'En güçlü iki çekirdek kümesi %70 hızla çalışır; ısı ve hız dalgalanması azalır. '
+                          'Yalnızca root ile çalışır, Shizuku ile uygulanamaz.',
+                      value: cfg.cpuCap,
+                      onChanged: busy ? null : (v) => game.updateConfig(cfg.copyWith(cpuCap: v)),
+                    ),
                   ],
                 ),
               ),
+              ],
               const SizedBox(height: 16),
               PrimaryButton(
-                label: game.active ? 'Yeniden Uygula ve Başlat' : 'Oyun Modunu Aç ve Başlat',
+                label: game.active ? 'Yeniden Uygula ve Başlat' : 'Genel Modu Aç ve Oyunu Başlat',
                 icon: Icons.sports_esports_rounded,
                 busy: busy,
                 onPressed: busy ? null : () => _start(launch: true),
@@ -444,7 +484,7 @@ class _StatusCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      game.config.package == kNineKingsPackage ? '9Kings' : game.config.package,
+                      'Genel Oyun Modu',
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                     ),
                     const SizedBox(height: 2),
@@ -494,6 +534,141 @@ class _StatusCard extends StatelessWidget {
               Text(game.syncNote!, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.35)),
             ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NineKingsCard extends StatelessWidget {
+  const _NineKingsCard({
+    required this.control,
+    required this.game,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final ControlController control;
+  final GameModeController game;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = game.nineKings;
+    final busy = game.busy;
+    final active = game.nineKingsActive;
+    final color = active ? AppColors.good : AppColors.primary;
+    final suggestion = game.nineKingsSuggestion;
+
+    return AppCard(
+      borderColor: color.faded(0.5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: color.faded(0.14), borderRadius: BorderRadius.circular(12)),
+                child: Icon(Icons.local_fire_department_rounded, color: color),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('9Kings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              ),
+              if (active) StatusPill(label: 'AÇIK', color: AppColors.good),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tek dokunuşla oyunu açar. Görüntü ayrıntısı düşürülür (hafif bulanıklık), kare hızı '
+            'sınırlanır, ekran kısılır, bildirimler susar; telefon ısınırsa koruma kendiliğinden '
+            'sıkılaşır. Oyun kapanınca her şey eski haline döner.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          const _Label('Görüntü ayrıntısı'),
+          const SizedBox(height: 8),
+          _Choices<DetailLevel>(
+            values: DetailLevel.values,
+            selected: profile.detail,
+            label: (v) => v.label,
+            onSelected: busy ? null : (v) => game.updateNineKings(profile.copyWith(detail: v)),
+          ),
+          const SizedBox(height: 6),
+          Text(profile.detail.hint, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
+          const SizedBox(height: 14),
+          const _Label('Kare hızı'),
+          const SizedBox(height: 8),
+          _Choices<int>(
+            values: const [30, 60],
+            selected: profile.fps,
+            label: (v) => v == 30 ? 'Serin · 30 FPS' : 'Akıcı · 60 FPS',
+            onSelected: busy ? null : (v) => game.updateNineKings(profile.copyWith(fps: v)),
+          ),
+          _SwitchRow(
+            title: 'Güçlü yöntem',
+            subtitle: 'Bulanıklık hiç etki etmiyorsa açın: telefonun tamamı oyun boyunca düşük '
+                'çözünürlüğe geçer (yazılar da bulanık görünür).',
+            value: profile.wholeScreen,
+            onChanged: busy ? null : (v) => game.updateNineKings(profile.copyWith(wholeScreen: v)),
+          ),
+          if (suggestion != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warn.faded(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Öneri', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(suggestion.reason, style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
+                  const SizedBox(height: 8),
+                  SoftButton(
+                    label: 'Uygula: ${suggestion.level.label}',
+                    icon: Icons.auto_fix_high_rounded,
+                    onPressed: busy ? null : game.applyNineKingsSuggestion,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          PrimaryButton(
+            label: active ? '9Kings\'i Yeniden Başlat' : '9Kings\'i Başlat',
+            icon: Icons.sports_esports_rounded,
+            busy: busy,
+            onPressed: busy ? null : onStart,
+          ),
+          if (active) ...[
+            const SizedBox(height: 10),
+            SoftButton(
+              label: 'Geri Al',
+              icon: Icons.undo_rounded,
+              color: AppColors.warn,
+              onPressed: busy ? null : onStop,
+            ),
+          ],
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('Oyun içi ipuçları', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              children: [
+                for (final tip in kNineKingsTips)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('• $tip', style: TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.4)),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -595,6 +770,7 @@ class _ReportCard extends StatelessWidget {
             'Büyük çekirdek hızı',
             s.avgCpuRatio == null ? 'okunamadı' : '%${(s.avgCpuRatio! * 100).round()}',
           ),
+          if (s.guardTriggered) row('Isı koruması', 'devreye girdi'),
           if (d != null) ...[
             const SizedBox(height: 10),
             Text(d.title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: color)),

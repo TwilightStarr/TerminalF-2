@@ -106,4 +106,22 @@ void main() {
       expect(parseWatchdogStatus('mark:saçma').mark, 'none');
     });
   });
+
+  group('ısı koruması', () {
+    test('sınırlama yapılan oturumda betiğe ısı koruması komutları girer', () {
+      const s = GameSession(
+        package: kNineKingsPackage,
+        settings: {'system:screen_brightness': '1000'},
+        touchedGameManager: true,
+        cpuMax: {'policy7': '3400000'},
+        startedAtMs: 1,
+      );
+      final script = buildWatchdogScript(s);
+      expect(script, contains('echo GUARD'));
+      expect(script, contains('echo 1870000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq'));
+      expect(script, contains('settings put system screen_brightness 350'));
+      expect(script.contains('@'), isFalse);
+      expect(script.contains("'"), isFalse);
+    });
+  });
 }
